@@ -65,3 +65,4 @@ Dependency direction: `flagscope-cli` → `flagscope-scanner` → `flagscope-sym
 | AD-13 | Scan only x64 system binaries whose bytes reference the feature-staging API | `features/find-feature-ids/decisions.md` |
 | AD-14 | Merge features found in several binaries and report conflicting IDs | `features/find-feature-ids/decisions.md` |
 | AD-15 | Parse command-line arguments with `clap` | `features/find-feature-ids/decisions.md` |
+| AD-16 | Store published lists as one text file per build, grouped by architecture and major build | `features/published-lists/decisions.md` |

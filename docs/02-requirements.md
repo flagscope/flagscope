@@ -66,9 +66,34 @@ Source: user statement, "configurable, but by default delete them after saving t
 Before a scan starts, the system must show the estimated total download size and the estimated duration. While the scan runs, it must show its progress and the estimated time remaining, recalculated from the download speed measured so far.
 Source: user statement, the duration depends on the server and the user's connection, so there is no generic limit, but there can be an estimate.
 
+### RF-14: Use a published list
+
+When the public data repository `flagscope/feature-lists` has a list for the installed build, the system must use that list instead of scanning, unless the user asks for a scan.
+Source: user statement, published lists as the main path for users with slow connections.
+
+### RF-15: Nearest published build
+
+When no published list exists for the exact installed build, the system must offer the list of the nearest published build, state that it belongs to a different build, and let the user choose between using it and scanning.
+Source: user statement, accepted proposal.
+
+### RF-16: Scan modes
+
+The system must offer three scan modes: light (the default), which downloads only the parts of each symbol file it reads and each identical symbol file once; full, which downloads complete symbol files and is the only mode that can keep them (RF-12); and targeted, which scans only the binaries the user names.
+Source: user statement, "we can have everything": the scan options and the published list.
+
+### RF-17: Reuse unchanged symbol-file results
+
+When a symbol file was already read in an earlier scan, the system must reuse its result instead of downloading it again.
+Source: user statement, accepted proposal: after a cumulative update only the changed symbol files are downloaded.
+
+### RF-18: Prepare a list for contribution
+
+The system must write a scanned list in the format and file location that `flagscope/feature-lists` expects, so that the person who scanned can submit it through a pull request.
+Source: user statement, contributing lists through pull requests.
+
 ### RF-10: Graphical user interface
 
-The system must offer every capability in RF-01 to RF-09, RF-12, and RF-13 through a graphical user interface.
+The system must offer every capability in RF-01 to RF-09 and RF-12 to RF-18 through a graphical user interface.
 Source: user statement, GPUI user interface built last.
 
 ## Non-functional

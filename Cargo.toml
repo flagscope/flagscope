@@ -7,7 +7,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.100"
 license = "GPL-3.0-only"
-repository = "https://github.com/jess-devs/flagscope"
+repository = "https://github.com/flagscope/flagscope"
 
 [workspace.dependencies]
 anyhow = "1.0.100"
