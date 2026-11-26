@@ -57,4 +57,5 @@ The first version is done when it **finds the IDs**: it produces the `Name: ID` 
 ## Open questions
 
 - Whether GPUI builds and runs on Windows and has a published release. Its standalone repository only says "See you in a few weeks". To be checked before the user-interface story. (assistant)
+- `README.md` is still a placeholder. Before the first release it must describe the project and the build prerequisites, including the Visual Studio C++ build tools (AD-11). (assistant)
 - Code conventions: resolved in `docs/03-architecture.md` ("Conventions") on 2026-11-26.

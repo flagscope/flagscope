@@ -19,7 +19,7 @@ This story is the proof of concept for the main project risk. If CA-01.2 fails, 
 3. CA-01.3: The run prints the size of the symbol file it downloaded.
 4. CA-01.4: The formatter reports zero differences and the linter reports zero warnings on the code of this story.
 
-**Status.** pending
+**Status.** verified
 
 ## HU-02: Scan the installed build
 

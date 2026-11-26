@@ -6,7 +6,7 @@
 
 ## Overview
 
-flagscope is a Cargo workspace of small crates. Library crates hold all the logic, and binary crates only parse input, call the libraries, and render the output. For the first feature, three library crates form a pipeline: `flagscope-symbols` finds and downloads the symbol file of each system binary, `flagscope-scanner` extracts feature names and IDs from those symbol files and orchestrates a full scan, and `flagscope-core` holds the domain types and the mach2 list format they share. The `flagscope-cli` binary crate exposes the scan on the command line. Later features add a crate for the Windows feature store and a crate for the GPUI user interface, without changing the existing crates' boundaries.
+flagscope is a Cargo workspace of small crates. Library crates hold all the logic, and binary crates only parse input, call the libraries, and render the output. For the first feature, three library crates form a pipeline: `flagscope-symbols` finds and downloads the symbol file of each system binary, `flagscope-scanner` extracts feature names from those symbol files and the matching IDs from the binaries (AD-12) and orchestrates a full scan, and `flagscope-core` holds the domain types and the mach2 list format they share. The `flagscope-cli` binary crate exposes the scan on the command line. Later features add a crate for the Windows feature store and a crate for the GPUI user interface, without changing the existing crates' boundaries.
 
 ## Boundaries
 
@@ -14,7 +14,7 @@ flagscope is a Cargo workspace of small crates. Library crates hold all the logi
 | ----- | ---- | ---- | ------------------- |
 | `flagscope-core` | library | Domain types (`FeatureId`, `FeatureName`, `Build`, `FeatureList`) and the mach2 text format (parse and serialise). No I/O beyond `std::io` readers and writers. | The network, the file system layout, PDBs, Windows APIs, any user interface. |
 | `flagscope-symbols` | library | Reading the CodeView debug information (PDB name, GUID, age) from PE files; the Microsoft symbol server client (URL, size query, download); the temporary symbol-file directory. | Feature names or IDs, list caching, any user interface. |
-| `flagscope-scanner` | library | Extracting `Name: ID` pairs from a PDB; the scan pipeline (choosing binaries, estimate, download, extraction, de-duplication, saving the list per build, deleting symbol files); scan progress events. | How progress or results are displayed; the Windows feature store. |
+| `flagscope-scanner` | library | Extracting `Name: ID` pairs from a PDB and its binary; the scan pipeline (choosing binaries, estimate, download, extraction, de-duplication, saving the list per build, deleting symbol files); scan progress events. | How progress or results are displayed; the Windows feature store. |
 | `flagscope-cli` | binary (`flagscope`) | Command-line arguments, console output, exit codes, the output file. | Symbol-server details, PDB parsing. It calls `flagscope-scanner` only. |
 | `flagscope-store` (later, `toggle-features-safely`) | library | FFI to the feature configuration functions of `ntdll.dll`, snapshots, revert. | The scanner, any user interface. |
 | `flagscope-gui` (later, `desktop-app`) | binary | The GPUI user interface. | Anything below the public APIs of the library crates. |
@@ -53,10 +53,12 @@ Dependency direction: `flagscope-cli` → `flagscope-scanner` → `flagscope-sym
 | AD-01 | Virtual Cargo workspace with a flat `crates/*` layout | `features/find-feature-ids/decisions.md` |
 | AD-02 | Split the logic into `core`, `symbols`, and `scanner` library crates, plus a thin CLI | `features/find-feature-ids/decisions.md` |
 | AD-03 | Run unelevated; relaunch elevated only to apply feature changes | `features/find-feature-ids/decisions.md` |
-| AD-04 | Accept only GPL-3.0-compatible, pure-Rust dependencies | `features/find-feature-ids/decisions.md` |
+| AD-04 | Accept only GPL-3.0-compatible, pure-Rust dependencies (superseded by AD-11) | `features/find-feature-ids/decisions.md` |
 | AD-05 | Read PDBs with `ms-pdb` | `features/find-feature-ids/decisions.md` |
 | AD-06 | Read PE debug information with `object` | `features/find-feature-ids/decisions.md` |
 | AD-07 | Download symbols with the blocking `ureq` client | `features/find-feature-ids/decisions.md` |
-| AD-08 | Take feature IDs from PDB constants; defer binary disassembly | `features/find-feature-ids/decisions.md` |
+| AD-08 | Take feature IDs from PDB constants; defer binary disassembly (superseded by AD-12) | `features/find-feature-ids/decisions.md` |
 | AD-09 | Store lists and temporary symbol files under the user's local application data | `features/find-feature-ids/decisions.md` |
 | AD-10 | Report scan progress through an observer trait | `features/find-feature-ids/decisions.md` |
+| AD-11 | Accept GPL-3.0-compatible dependencies in Rust, C, or C++ that build with the standard Windows Rust toolchain | `features/find-feature-ids/decisions.md` |
+| AD-12 | Take feature names from PDB public symbols and IDs from the feature descriptor in the binary | `features/find-feature-ids/decisions.md` |

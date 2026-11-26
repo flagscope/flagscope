@@ -48,7 +48,7 @@ Precise technical terminology is mandatory in code, comments, documentation, com
 ## Code
 
 - The logic (one or more library crates) and the user interface (a binary crate using GPUI) are separate crates in one Cargo workspace.
-- Code is formatted, modular, and reusable, and comments are clean. The exact conventions (formatting, lints, documentation) are recorded in `docs/` once the architecture phase is approved.
+- Code is formatted, modular, and reusable, and comments are clean. The exact conventions (formatting, lints, documentation, errors, tests) are in `docs/03-architecture.md` ("Conventions").
 
 ## Safety of the user's system
 

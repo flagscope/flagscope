@@ -47,7 +47,7 @@ Alternatives considered:
 - Accept any open-source licence: some licences (for example GPL-2.0-only or SSPL) are incompatible with GPL-3.0-only.
 Decision: dependencies must have a licence compatible with GPL-3.0-only (MIT, Apache-2.0, BSD, MPL-2.0, Zlib, and similar), be written in Rust or wrap only Windows system libraries, and be maintained. The user may revise this rule if it blocks a necessary capability.
 Consequences: every new dependency is checked against this rule before it is added. Some capabilities may need more own code than with C libraries. Revisiting the rule needs a new decision entry.
-Status: active
+Status: superseded by AD-11
 
 ## AD-05: Read PDBs with `ms-pdb`
 
@@ -57,8 +57,8 @@ Alternatives considered:
 - `pdb` 0.8.0 (MIT OR Apache-2.0): mature and read-only, but its last release was in 2022.
 - `pdb2` (fork of `pdb`): more recent, but a smaller community and unclear long-term maintenance.
 - Writing an MSF/CodeView parser: full control, but a large amount of format work that existing crates already do.
-Decision: `ms-pdb` (0.1.22, MIT OR Apache-2.0), published by Microsoft and released regularly in 2025 and 2026. If HU-01 shows that it cannot read the constant values the scanner needs, `pdb` is the fallback, recorded as a new decision.
-Consequences: version 0.1.x may change its API between releases; it is pinned in `[workspace.dependencies]` and upgraded deliberately. HU-01 confirms that it reads the symbols the scanner needs.
+Decision: `ms-pdb` (0.1.22, MIT OR Apache-2.0), published by Microsoft and released regularly in 2025 and 2026. `pdb` (0.8.0, pure Rust) is the backup reader, confirmed by the user on 2026-11-26: on 2026-11-26 both crates read the same 261 feature symbols from the `shell32.pdb` of build 26300.10075. Only one reader is compiled in. All PDB access goes through one module of `flagscope-scanner`, so switching to `pdb` means replacing that module, recorded as a new decision, if `ms-pdb` fails to read a PDB or stops being maintained.
+Consequences: `ms-pdb` returns `anyhow::Error`, so `anyhow` is a direct dependency of `flagscope-scanner`, used only inside the PDB module and converted to the crate's own error there. Version 0.1.x may change its API between releases; it is pinned in `[workspace.dependencies]` and upgraded deliberately. HU-01 confirms that it reads the symbols the scanner needs.
 Status: active
 
 ## AD-06: Read PE debug information with `object`
@@ -92,7 +92,7 @@ Alternatives considered:
 - Disassembly only: does not need PDB constants, but still needs PDBs to locate the functions, and is fragile across compiler changes.
 Decision: extract IDs from PDB constants only. The disassembly fallback is added, with `iced-x86` (MIT), only if HU-01 or HU-02 show that a significant share of features have no ID in the PDB; that case is reported to the user first.
 Consequences: features whose ID is only in the binary are reported as "name without ID" and counted, not dropped silently. The name patterns follow mach2's list of symbol name forms.
-Status: active
+Status: superseded by AD-12
 
 ## AD-09: Store lists and temporary symbol files under the user's local application data
 
@@ -115,4 +115,26 @@ Alternatives considered:
 - A channel of progress events: decouples threads well, but forces every caller to drain a channel even when it does not need progress.
 Decision: the scan function takes a reference to a `ScanObserver` trait whose methods receive the estimate, progress updates, and the final totals. The CLI implements it for the console; GPUI will implement it by forwarding to its UI thread.
 Consequences: the scanner has no user-facing text. A no-op observer serves tests. The trait is part of the public API and changes to it affect every front end.
+Status: active
+
+## AD-11: Accept GPL-3.0-compatible dependencies in Rust, C, or C++ that build with the standard Windows Rust toolchain
+
+Date: 2026-11-26
+Context: while implementing HU-01, `ms-pdb` (AD-05) brought in `zstd-sys`, which compiles bundled C code, breaking AD-04. The user stated that adding a C compiler is acceptable: the project is not limited to one language, although Rust alone would be simpler.
+Alternatives considered:
+- Keep AD-04 and switch to the `pdb` crate (pure Rust): it reads the current PDB format, but has had no release since 2022 and does not support Microsoft's newer compressed PDB format.
+- Keep AD-04 and write an own PDB reader: avoids the dependency, but repeats format work `ms-pdb` already does.
+Decision: dependencies must have a licence compatible with GPL-3.0-only (MIT, Apache-2.0, BSD, MPL-2.0, Zlib, and similar) and be maintained. They may be written in Rust, C, or C++, provided they build with the toolchain the Rust MSVC target already requires (Visual Studio Build Tools with the C++ workload), with no other installation. Stated by the user.
+Consequences: contributors need the Visual Studio C++ build tools, which the MSVC Rust target needs anyway; `README.md` must say so. Builds take longer when C code is compiled. `ms-pdb` stays as the PDB reader (AD-05). Every new dependency is still checked against the licence and maintenance rule.
+Status: active
+
+## AD-12: Take feature names from PDB public symbols and IDs from the feature descriptor in the binary
+
+Date: 2026-11-26
+Context: AD-08 assumed that each feature's ID is a constant (`::id`) in the PDB, as mach2 read it through DIA. During HU-01, the public `shell32.pdb` of build 26300.10075 had no constant records and no type records: Microsoft strips them from public PDBs. It did contain one public symbol `Feature_<Name>__descriptor` per feature, pointing into the `.rdata` section of `shell32.dll`, and the 32-bit little-endian value at offset 8 of that structure is the feature ID. Evidence: `Feature_57437827__descriptor` holds 57437827 and `Feature_63092242__descriptor` holds 63092242; of the 261 features extracted, the 40 whose names also appear in mach2's `26100.2314_WNC` list have identical IDs, with no differences.
+Alternatives considered:
+- PDB constants (AD-08): not available in public PDBs.
+- Disassembling the getter functions in the binary, mach2's fallback: works without descriptors, but needs a disassembler and depends on the compiler's instruction choices.
+Decision: the feature name is the text between `Feature_` and `__descriptor` in a public symbol of the PDB. The ID is the `u32` (little-endian) at offset 8 of the descriptor, read from the binary at the symbol's section and offset. Approved by the user.
+Consequences: the scanner needs both the PDB and the binary, which it already has. The scan depends on the descriptor layout Microsoft's feature-staging library uses; HU-02 checks it across many binaries, and features with a name but no readable descriptor are counted and reported, not dropped silently. Disassembly is not implemented.
 Status: active

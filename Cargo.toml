@@ -1,0 +1,29 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.100"
+license = "GPL-3.0-only"
+repository = "https://github.com/jess-devs/flagscope"
+
+[workspace.dependencies]
+anyhow = "1.0.100"
+flagscope-core = { path = "crates/flagscope-core" }
+flagscope-symbols = { path = "crates/flagscope-symbols" }
+ms-pdb = "0.1.22"
+object = { version = "0.41.0", default-features = false, features = ["read_core", "pe", "std"] }
+thiserror = "2.0.21"
+ureq = { version = "3.5.2", default-features = false, features = ["native-tls"] }
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "warn"
+missing_safety_doc = "warn"
+missing_errors_doc = "warn"
+missing_panics_doc = "warn"
