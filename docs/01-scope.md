@@ -57,12 +57,4 @@ The first version is done when it **finds the IDs**: it produces the `Name: ID` 
 ## Open questions
 
 - Whether GPUI builds and runs on Windows and has a published release. Its standalone repository only says "See you in a few weeks". To be checked before the user-interface story. (assistant)
-- Code conventions, to be fixed in Phase 4. Candidates found during research:
-  - Virtual workspace with a flat `crates/*` layout; `[workspace.dependencies]`, `[workspace.package]`, and `[workspace.lints]` inherited by every crate.
-  - `rustfmt` with default settings; `clippy` with `-D warnings`.
-  - Documentation lints: `missing_docs`, `clippy::missing_safety_doc`, `missing_errors_doc`, `missing_panics_doc`, and `undocumented_unsafe_blocks`. Every `unsafe` block calling `ntdll` carries a `// SAFETY:` comment.
-  - Rustdoc in the style of the Rust API Guidelines, with `# Errors`, `# Safety`, and `# Panics` sections.
-  - ISO references: ISO/IEC 25010:2023 for quality attributes (maintainability: modularity, reusability, analysability, modifiability, testability) and ISO/IEC/IEEE 29148 for writing verifiable requirements.
-  - Conventional Commits carrying the story ID.
-  - Test layout: unit tests next to the code (`#[cfg(test)]`); integration tests in each library crate's tests directory, using fixtures the project creates itself, never Microsoft symbol files; end-to-end tests that run the command-line executable; tests that need the network or the real feature store marked so they can run separately. The user-interface logic is tested with GPUI's test context, and the visual check is manual.
-  - Branch protection on the default branch: at least one approving review from a maintainer, with AI review as an advisory check only.
+- Code conventions: resolved in `docs/03-architecture.md` ("Conventions") on 2026-11-26.
