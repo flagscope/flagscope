@@ -12,11 +12,17 @@
 - Load `Name: ID` lists in the mach2 format for earlier builds.
 - Scan the PDBs of the installed build to produce its feature list, and cache it by build number.
 - Search features by name or by ID.
+- Command-line output of the feature list: written to a file in the mach2 format and printed to the console. This is how the first version delivers its result. (added 2026-11-26, stated by the user)
+- Delete downloaded symbol files once the feature list is saved, with an option to keep them. (added 2026-11-26, stated by the user)
+- Estimated download size and duration before a scan, and progress with time remaining while it runs. (added 2026-11-26, stated by the user)
+- Automated unit, integration, and end-to-end tests. (added 2026-11-26, stated by the user)
 - GPUI user interface on top of everything above, built last, in English, with all user-facing strings ready for translation.
 - Release binaries for Windows 11 x64 through GitHub Releases.
 
 ## Out of scope
 
+- Automated end-to-end tests that change feature states on a contributor's machine or on a CI runner: state-changing tests run only in a disposable environment (for example Windows Sandbox or a virtual machine). (added 2026-11-26)
+- A fixed time limit for scanning: the duration depends on Microsoft's symbol server and the user's connection. (added 2026-11-26, stated by the user)
 - Operating systems other than Windows: the feature APIs exist only in `ntdll.dll`.
 - Windows 10: the user set Windows 11 as the minimum.
 - ARM64 and x86: deferred; x64 only for now.
@@ -36,6 +42,7 @@ The first version is done when it **finds the IDs**: it produces the `Name: ID` 
 - GPUI is licensed under Apache-2.0, which is compatible with GPL-3.0. Not yet checked against the current GPUI repository. [inferred]
 - `RtlQueryAllFeatureConfigurations` and `RtlSetFeatureConfigurations` are still available in `ntdll.dll` on current builds.
 - Reading feature states does not require administrator rights; changing them does. Not yet observed. [inferred]
+- Scanning a build for the first time needs an Internet connection, because the symbol files are downloaded from Microsoft's public symbol server. Reusing a saved list and importing mach2 lists work offline. [inferred]
 
 ## Open questions
 
@@ -47,4 +54,5 @@ The first version is done when it **finds the IDs**: it produces the `Name: ID` 
   - Rustdoc in the style of the Rust API Guidelines, with `# Errors`, `# Safety`, and `# Panics` sections.
   - ISO references: ISO/IEC 25010:2023 for quality attributes (maintainability: modularity, reusability, analysability, modifiability, testability) and ISO/IEC/IEEE 29148 for writing verifiable requirements.
   - Conventional Commits carrying the story ID.
+  - Test layout: unit tests next to the code (`#[cfg(test)]`); integration tests in each library crate's tests directory, using fixtures the project creates itself, never Microsoft symbol files; end-to-end tests that run the command-line executable; tests that need the network or the real feature store marked so they can run separately. The user-interface logic is tested with GPUI's test context, and the visual check is manual.
   - Branch protection on the default branch: at least one approving review from a maintainer, with AI review as an advisory check only.

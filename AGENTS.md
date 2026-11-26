@@ -16,8 +16,9 @@ The decisions that govern this repository live in `docs/`. Read them before chan
 | --------------------- | ---------------------------------------- |
 | `docs/00-contexto.md` | problem, users, constraints, methodology |
 | `docs/01-alcance.md`  | in scope, out of scope, assumptions      |
+| `docs/02-requisitos.md` | functional and non-functional requirements |
 
-This table grows as each phase is approved (requirements, architecture, quality, and the per-feature folders).
+This table grows as each phase is written (architecture, quality, and the per-feature folders).
 
 ## Rules
 

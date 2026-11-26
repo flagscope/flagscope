@@ -29,6 +29,7 @@ Windows ships hidden features that are enabled or disabled by numeric ID (featur
 - Every pull request is reviewed and approved by a maintainer before merging. Automated AI review may run first, but it never replaces human approval. (stated by the user)
 - Privilege model: the application runs without administrator rights and relaunches itself elevated only to apply changes. (chosen by the user among the alternatives offered; recorded as a decision in Phase 4)
 - Every action that changes system state records the previous state first, so that it can be reverted. (stated by the user)
+- Automated tests at the unit, integration, and end-to-end levels, wherever each level applies. (stated by the user, added after Phase 1 approval)
 - No sensitive data is ever committed, and neither is content that adds no value to the code. (stated by the user)
 - Minimum supported OS: Windows 11. (stated by the user)
 - Architecture: x64 only for now; other architectures later. (stated by the user)
