@@ -86,7 +86,7 @@ Source: user statement, English first and easy to translate later.
 ### RNF-03: Reversibility
 
 Every change to system state must be reversible, measured as: 100% of state-changing operations have a snapshot recorded before they run (RF-04).
-Source: user statement, "casi una regla para cada acción".
+Source: user statement, "almost a rule for every action".
 
 ### RNF-04: Least privilege
 

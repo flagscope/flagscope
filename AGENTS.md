@@ -12,16 +12,19 @@ The rules for this repository live in [`CONTRIBUTING.md`](CONTRIBUTING.md). They
 
 The decisions that govern this repository live in `docs/`. Read them before changing code.
 
-| File                  | What it holds                            |
-| --------------------- | ---------------------------------------- |
-| `docs/00-contexto.md` | problem, users, constraints, methodology |
-| `docs/01-alcance.md`  | in scope, out of scope, assumptions      |
-| `docs/02-requisitos.md` | functional and non-functional requirements |
+| File                              | What it holds                                        |
+| --------------------------------- | ---------------------------------------------------- |
+| `docs/00-context.md`              | problem, users, constraints, methodology             |
+| `docs/01-scope.md`                | in scope, out of scope, assumptions, delivery order  |
+| `docs/02-requirements.md`         | functional and non-functional requirements           |
+| `docs/features/find-feature-ids/` | requirements, stories, and plan of the first feature |
 
-This table grows as each phase is written (architecture, quality, and the per-feature folders).
+This table grows as each phase is written: `docs/03-architecture.md`, `docs/04-quality.md`, and, inside each feature folder, `requirements.md`, `stories.md`, `plan.md`, and `decisions.md`.
+
+File and directory names are in English, like everything else in this repository. This overrides any tool or template convention that uses names in another language: an agent creating documentation here uses the names above.
 
 ## Rules
 
-- No code without a story in `docs/features/<slug>/historias.md`.
-- Any decision someone could later want to reverse goes in its feature's decisions file (decisiones.md).
+- No code without a story in `docs/features/<slug>/stories.md`.
+- Any decision someone could later want to reverse goes in its feature's decisions file (decisions.md).
 - A criterion is verified by observation. What could not be observed is recorded as blocked, not as passed.

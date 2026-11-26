@@ -19,6 +19,16 @@
 - GPUI user interface on top of everything above, built last, in English, with all user-facing strings ready for translation.
 - Release binaries for Windows 11 x64 through GitHub Releases.
 
+## Delivery order
+
+The scope is delivered as five features, in this order. Only the first has full documents so far.
+
+1. `find-feature-ids`: the installed build's feature list (first version). See `docs/features/find-feature-ids/`.
+2. `contributor-quality-gates`: continuous integration for formatting, linting, tests by level, DCO sign-off, and secret scanning.
+3. `inspect-features`: read feature states, import mach2 lists, and fuzzy search.
+4. `toggle-features-safely`: change feature states with snapshots, elevation, and revert.
+5. `desktop-app`: GPUI user interface.
+
 ## Out of scope
 
 - Automated end-to-end tests that change feature states on a contributor's machine or on a CI runner: state-changing tests run only in a disposable environment (for example Windows Sandbox or a virtual machine). (added 2026-11-26)

@@ -43,7 +43,7 @@ Precise technical terminology is mandatory in code, comments, documentation, com
 
 1. General software engineering: **ISO/IEC/IEEE 24765:2017** (Systems and software engineering — Vocabulary; online version: SEVOCAB).
 2. Rust and Cargo: the glossaries of **The Cargo Book** and **The Rust Reference**.
-3. Project domain terms: the glossary in `docs/00-contexto.md`. A new term is added there before it is used.
+3. Project domain terms: the glossary in `docs/00-context.md`. A new term is added there before it is used.
 
 ## Code
 
@@ -57,6 +57,6 @@ Precise technical terminology is mandatory in code, comments, documentation, com
 
 ## Documentation-first workflow
 
-- No code without a story in `docs/features/<slug>/historias.md`.
-- Any decision someone could later want to reverse is recorded in its feature's decisions file (decisiones.md).
+- No code without a story in `docs/features/<slug>/stories.md`.
+- Any decision someone could later want to reverse is recorded in its feature's decisions file (decisions.md).
 - An acceptance criterion is verified by observation. What could not be observed is recorded as blocked, not as passed.
