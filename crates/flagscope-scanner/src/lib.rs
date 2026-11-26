@@ -4,8 +4,14 @@
 //! binary's read-only data. The binary's public PDB names that structure
 //! `Feature_<Name>__descriptor`; the feature ID is stored inside it (AD-12).
 
+mod build;
+mod candidates;
 mod descriptor;
 mod pdb_symbols;
+mod scan;
+
+pub use build::installed_build;
+pub use scan::{Conflict, ScanOptions, ScanReport, ScanStats, scan_installed_build};
 
 use std::fs;
 use std::io;
@@ -39,6 +45,31 @@ pub enum Error {
         path: PathBuf,
         /// The underlying parser error.
         source: object::Error,
+    },
+    /// The installed build could not be detected.
+    #[error("cannot detect the installed Windows build: {message}")]
+    Build {
+        /// Description of the registry failure.
+        message: String,
+    },
+    /// A required environment variable is not set.
+    #[error("the environment variable {variable} is not set")]
+    Environment {
+        /// The variable name.
+        variable: &'static str,
+    },
+    /// The symbol server could not be reached.
+    #[error("cannot reach the symbol server ({url})")]
+    NoConnection {
+        /// The URL that could not be reached.
+        url: String,
+    },
+    /// A symbol file download failed for a reason other than a missing file
+    /// or a missing connection.
+    #[error(transparent)]
+    Download {
+        /// The underlying download error.
+        source: flagscope_symbols::Error,
     },
 }
 

@@ -62,3 +62,6 @@ Dependency direction: `flagscope-cli` → `flagscope-scanner` → `flagscope-sym
 | AD-10 | Report scan progress through an observer trait | `features/find-feature-ids/decisions.md` |
 | AD-11 | Accept GPL-3.0-compatible dependencies in Rust, C, or C++ that build with the standard Windows Rust toolchain | `features/find-feature-ids/decisions.md` |
 | AD-12 | Take feature names from PDB public symbols and IDs from the feature descriptor in the binary | `features/find-feature-ids/decisions.md` |
+| AD-13 | Scan only x64 system binaries whose bytes reference the feature-staging API | `features/find-feature-ids/decisions.md` |
+| AD-14 | Merge features found in several binaries and report conflicting IDs | `features/find-feature-ids/decisions.md` |
+| AD-15 | Parse command-line arguments with `clap` | `features/find-feature-ids/decisions.md` |

@@ -11,11 +11,14 @@ repository = "https://github.com/jess-devs/flagscope"
 
 [workspace.dependencies]
 anyhow = "1.0.100"
+clap = { version = "4.6.10", features = ["derive"] }
 flagscope-core = { path = "crates/flagscope-core" }
 flagscope-symbols = { path = "crates/flagscope-symbols" }
+flagscope-scanner = { path = "crates/flagscope-scanner" }
 ms-pdb = "0.1.22"
 object = { version = "0.41.0", default-features = false, features = ["read_core", "pe", "std"] }
 thiserror = "2.0.21"
+windows-registry = "0.100.0"
 ureq = { version = "3.5.2", default-features = false, features = ["native-tls"] }
 
 [workspace.lints.rust]

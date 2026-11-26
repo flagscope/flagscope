@@ -2,6 +2,21 @@
 
 use std::fmt;
 
+/// A Windows build, identified as `major.revision` (for example `26300.10075`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Build {
+    /// Build number (`CurrentBuildNumber`), for example `26300`.
+    pub major: u32,
+    /// Update build revision (`UBR`), for example `10075`.
+    pub revision: u32,
+}
+
+impl fmt::Display for Build {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}.{}", self.major, self.revision)
+    }
+}
+
 /// Identifier of a feature in the Windows feature configuration store.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FeatureId(pub u32);
@@ -31,6 +46,15 @@ impl fmt::Display for Feature {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn build_displays_as_major_dot_revision() {
+        let build = Build {
+            major: 26_300,
+            revision: 10_075,
+        };
+        assert_eq!(build.to_string(), "26300.10075");
+    }
 
     #[test]
     fn feature_displays_as_list_entry() {

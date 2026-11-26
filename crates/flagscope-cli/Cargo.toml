@@ -1,0 +1,18 @@
+[package]
+name = "flagscope-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "flagscope"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+flagscope-scanner.workspace = true
+
+[lints]
+workspace = true

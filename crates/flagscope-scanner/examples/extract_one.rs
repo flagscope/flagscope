@@ -11,11 +11,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let reference =
         flagscope_symbols::read_pdb_reference(&binary)?.ok_or("the binary has no PDB reference")?;
-    let pdb = flagscope_symbols::download(
-        &reference,
-        flagscope_symbols::MICROSOFT_SYMBOL_SERVER,
-        &directory,
-    )?;
+    let pdb = flagscope_symbols::SymbolServer::microsoft().download(&reference, &directory)?;
     println!("Downloaded {} ({} bytes)", pdb.path.display(), pdb.size);
 
     let extraction = flagscope_scanner::extract_features(&pdb.path, &binary)?;

@@ -34,7 +34,7 @@ Covers: RF-06.1, RF-06.3, RNF-01.1, RNF-04.1
 3. CA-02.3: The scan completes when started from a console that is not running as administrator.
 4. CA-02.4: With the network disconnected and no saved list for the build, the tool prints a message naming the missing connection, exits with a non-zero exit code, and leaves no list file behind.
 
-**Status.** pending
+**Status.** verified
 
 ## HU-03: Get the list as a file and on the console
 

@@ -138,3 +138,38 @@ Alternatives considered:
 Decision: the feature name is the text between `Feature_` and `__descriptor` in a public symbol of the PDB. The ID is the `u32` (little-endian) at offset 8 of the descriptor, read from the binary at the symbol's section and offset. Approved by the user.
 Consequences: the scanner needs both the PDB and the binary, which it already has. The scan depends on the descriptor layout Microsoft's feature-staging library uses; HU-02 checks it across many binaries, and features with a name but no readable descriptor are counted and reported, not dropped silently. Disassembly is not implemented.
 Status: active
+
+## AD-13: Scan only x64 system binaries whose bytes reference the feature-staging API
+
+Date: 2026-11-26
+Context: HU-02 scans the installed build. On build 26300.10075, `%SystemRoot%\System32` and `%SystemRoot%\SystemApps` hold 6,358 `.dll` and `.exe` files, 5,870 of them x64 with a PDB reference. Downloading every PDB would take several gigabytes and most binaries have no features.
+Alternatives considered:
+- Every x64 binary with a PDB reference: complete by construction, but more than twice the downloads.
+- Only binaries whose import table names the feature-staging API: cheap, but it missed `shell32.dll` (261 features), because those calls are not all in the regular import table.
+- A fixed list of known binaries: small, but goes stale with every build.
+Decision: The scan covers x64 PE files with a CodeView record under `%SystemRoot%\System32` and `%SystemRoot%\SystemApps` (recursively, without following links) and the executables directly in `%SystemRoot%` (for example `explorer.exe`). Of those, it downloads PDBs only for binaries whose bytes contain `featurestaging` (ignoring case) or `RtlNotifyFeatureUsage`. Evidence on 2026-11-26: 2,483 of 5,870 binaries match, including `shell32.dll`; in a sample of 25 matching binaries, 20 had features; in a sample of 25 non-matching binaries, the 20 that had a public PDB had no features, and 5 third-party binaries had no public PDB.
+Consequences: The filter rests on a sample, not on a proof: a binary that uses features without either string would be missed. Binaries whose PDB is not on the server (HTTP 404) are skipped and counted. The sample predicted about 3.2 GB for a full scan; the first full scan (HU-02, 2026-11-26) downloaded 7,952 MB from 2,413 PDBs in 54 minutes, so the sample underestimated the average size.
+Status: active
+
+## AD-14: Merge features found in several binaries and report conflicting IDs
+
+Date: 2026-11-26
+Context: the same feature is often compiled into several binaries, so a build-wide scan finds the same name many times. CA-02.2 requires a list without duplicate names.
+Alternatives considered:
+- Keep one entry per binary: duplicates names, breaking CA-02.2 and the mach2 format.
+- Keep the first ID found: hides conflicts and depends on scan order.
+- Keep all IDs under renamed entries, as mach2 did (`|mach2.warning.duplicate<N>`): keeps data, but invents names.
+Decision: Entries with the same name and the same ID become one entry. A name found with different IDs is left out of the list and reported as a conflict, with every ID and the binaries it came from.
+Consequences: The list never contains a guessed ID. The user sees how many conflicts there were and can inspect them. If conflicts turn out to be frequent, this decision is revisited.
+Status: active
+
+## AD-15: Parse command-line arguments with `clap`
+
+Date: 2026-11-26
+Context: `flagscope-cli` needs a `scan` command now, and HU-03 and HU-05 add options (output file, overwrite, rescan, keep symbol files).
+Alternatives considered:
+- Parsing `std::env::args` by hand: no dependency, but help text, errors, and option validation all become own code.
+- `argh` or `lexopt`: smaller, but less common among contributors and with fewer features for help and validation.
+Decision: `clap` 4 (MIT OR Apache-2.0) with its derive API, only in `flagscope-cli`.
+Consequences: Help text and argument errors come from `clap` in English; when the user-interface translation layer arrives, they are reviewed against RNF-02. Library crates never depend on `clap`.
+Status: active

@@ -30,12 +30,22 @@ pub enum Error {
         /// The underlying parser error.
         source: object::Error,
     },
-    /// The request to the symbol server failed.
-    #[error("download of {url} failed: {source}")]
-    Download {
+    /// The server answered, but not with the file (for example HTTP 404 when
+    /// Microsoft does not publish the PDB).
+    #[error("{url} returned HTTP status {status}")]
+    Status {
         /// The requested URL.
         url: String,
-        /// The underlying HTTP error.
+        /// The HTTP status code.
+        status: u16,
+    },
+    /// The server could not be reached: no network, DNS failure, refused or
+    /// interrupted connection, or timeout.
+    #[error("cannot reach {url}: {source}")]
+    Connection {
+        /// The requested URL.
+        url: String,
+        /// The underlying transport error.
         source: Box<ureq::Error>,
     },
 }
@@ -80,18 +90,43 @@ impl PdbReference {
 /// Returns [`Error::Io`] if the file cannot be read and [`Error::Parse`] if it
 /// is not a PE image.
 pub fn read_pdb_reference(binary: &Path) -> Result<Option<PdbReference>, Error> {
-    use object::Object as _;
-
     let data = fs::read(binary).map_err(|source| Error::Io {
         path: binary.to_owned(),
         source,
     })?;
-    let parse_error = |source| Error::Parse {
+    let file = object::File::parse(&*data).map_err(|source| Error::Parse {
         path: binary.to_owned(),
         source,
-    };
-    let file = object::File::parse(&*data).map_err(parse_error)?;
-    let Some(code_view) = file.pdb_info().map_err(parse_error)? else {
+    })?;
+    code_view_reference(&file).map_err(|source| Error::Parse {
+        path: binary.to_owned(),
+        source,
+    })
+}
+
+/// Returns the PDB reference of an x64 PE image given its contents.
+///
+/// Returns `Ok(None)` for images of other architectures and for images
+/// without a CodeView record.
+///
+/// # Errors
+///
+/// Returns the parser error if `contents` is not a readable PE image.
+pub fn pdb_reference_of_x64(contents: &[u8]) -> Result<Option<PdbReference>, object::Error> {
+    use object::Object as _;
+
+    let file = object::File::parse(contents)?;
+    if file.architecture() != object::Architecture::X86_64 {
+        return Ok(None);
+    }
+    code_view_reference(&file)
+}
+
+/// Reads the CodeView record of a parsed image.
+fn code_view_reference(file: &object::File<'_>) -> Result<Option<PdbReference>, object::Error> {
+    use object::Object as _;
+
+    let Some(code_view) = file.pdb_info()? else {
         return Ok(None);
     };
     // The record may hold a full build-machine path; the server uses only the file name.
@@ -113,40 +148,80 @@ pub struct DownloadedFile {
     pub size: u64,
 }
 
-/// Downloads the PDB from `server` into `directory`, keeping its file name.
-///
-/// # Errors
-///
-/// Returns [`Error::Download`] if the server does not return the file and
-/// [`Error::Io`] if it cannot be written.
-pub fn download(
-    reference: &PdbReference,
-    server: &str,
-    directory: &Path,
-) -> Result<DownloadedFile, Error> {
-    let url = format!("{server}/{}", reference.server_path());
-    // Windows' own TLS stack (AD-07), so no C toolchain is needed for TLS.
-    let tls = ureq::tls::TlsConfig::builder()
-        .provider(ureq::tls::TlsProvider::NativeTls)
-        .build();
-    let agent = ureq::Agent::config_builder()
-        .tls_config(tls)
-        .build()
-        .new_agent();
-    let response = agent.get(&url).call().map_err(|source| Error::Download {
-        url: url.clone(),
-        source: Box::new(source),
-    })?;
+/// A symbol server client. One client reuses its connections across downloads.
+#[derive(Debug, Clone)]
+pub struct SymbolServer {
+    base_url: String,
+    agent: ureq::Agent,
+}
 
-    let path = directory.join(&reference.file_name);
-    let io_error = |source| Error::Io {
-        path: path.clone(),
-        source,
-    };
-    fs::create_dir_all(directory).map_err(io_error)?;
-    let mut file = fs::File::create(&path).map_err(io_error)?;
-    let size = io::copy(&mut response.into_body().into_reader(), &mut file).map_err(io_error)?;
-    Ok(DownloadedFile { path, size })
+impl SymbolServer {
+    /// A client for the server at `base_url` (without a trailing slash).
+    #[must_use]
+    pub fn new(base_url: &str) -> Self {
+        // Windows' own TLS stack (AD-07).
+        let tls = ureq::tls::TlsConfig::builder()
+            .provider(ureq::tls::TlsProvider::NativeTls)
+            .build();
+        let agent = ureq::Agent::config_builder()
+            .tls_config(tls)
+            .build()
+            .new_agent();
+        Self {
+            base_url: base_url.to_owned(),
+            agent,
+        }
+    }
+
+    /// A client for [`MICROSOFT_SYMBOL_SERVER`].
+    #[must_use]
+    pub fn microsoft() -> Self {
+        Self::new(MICROSOFT_SYMBOL_SERVER)
+    }
+
+    /// Downloads the PDB into `directory`, keeping its file name.
+    ///
+    /// A partially written file is removed when the download fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Status`] if the server answers without the file,
+    /// [`Error::Connection`] if it cannot be reached, and [`Error::Io`] if the
+    /// file cannot be written or the transfer is interrupted.
+    pub fn download(
+        &self,
+        reference: &PdbReference,
+        directory: &Path,
+    ) -> Result<DownloadedFile, Error> {
+        let url = format!("{}/{}", self.base_url, reference.server_path());
+        let response = self.agent.get(&url).call().map_err(|source| match source {
+            ureq::Error::StatusCode(status) => Error::Status {
+                url: url.clone(),
+                status,
+            },
+            source => Error::Connection {
+                url: url.clone(),
+                source: Box::new(source),
+            },
+        })?;
+
+        let path = directory.join(&reference.file_name);
+        let io_error = |source| Error::Io {
+            path: path.clone(),
+            source,
+        };
+        fs::create_dir_all(directory).map_err(io_error)?;
+        let mut file = fs::File::create(&path).map_err(io_error)?;
+        match io::copy(&mut response.into_body().into_reader(), &mut file) {
+            Ok(size) => Ok(DownloadedFile { path, size }),
+            Err(source) => {
+                drop(file);
+                // Best effort: the caller is told about the original failure either way.
+                let _ = fs::remove_file(&path);
+                Err(io_error(source))
+            }
+        }
+    }
 }
 
 #[cfg(test)]

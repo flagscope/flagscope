@@ -9,12 +9,11 @@ repository.workspace = true
 [dependencies]
 anyhow.workspace = true
 flagscope-core.workspace = true
+flagscope-symbols.workspace = true
 ms-pdb.workspace = true
 object.workspace = true
 thiserror.workspace = true
+windows-registry.workspace = true
 
 [lints]
 workspace = true
-
-[dev-dependencies]
-flagscope-symbols.workspace = true
