@@ -6,6 +6,7 @@ These rules are mandatory for every contributor, human or automated. Pull reques
 
 - The project is licensed under GPL-3.0-only (see `LICENSE`). By contributing, you agree that your contribution is licensed under the same terms.
 - Every commit carries a Developer Certificate of Origin sign-off (`git commit -s`), which adds a `Signed-off-by:` line with your real name and an email you control. A GitHub no-reply address is accepted. Commits without it are rejected.
+- Merge commits that GitHub creates when a pull request is merged are exempt from the sign-off; every commit in the pull request itself carries it.
 
 ## Repository content
 
@@ -29,6 +30,7 @@ Only content that adds value to the project is committed: source code, tests, do
 ## Review and merging
 
 - Every pull request needs at least one approving review from a maintainer before it is merged. Collaborators with write access may approve, under their responsibility.
+- While the project has a single maintainer, GitHub does not let the maintainer approve their own pull requests; those are merged after the maintainer reviews the diff. Once there are two or more maintainers, every pull request needs another maintainer's approval.
 - Automated AI review may run on pull requests, but it is advisory only and never replaces human approval.
 - Changes reach the default branch only through pull requests.
 

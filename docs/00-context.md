@@ -28,6 +28,7 @@ Windows ships hidden features that are enabled or disabled by numeric ID (featur
 - Every commit carries a DCO sign-off. (chosen by the user among the alternatives offered)
 - Every commit, push, and pull request is the responsibility of a human author, never under an AI identity. (stated by the user)
 - Every pull request is reviewed and approved by a maintainer before merging. Automated AI review may run first, but it never replaces human approval. (stated by the user)
+- While there is a single maintainer, the maintainer's own pull requests are merged after the maintainer reviews the diff; GitHub merge commits are exempt from the DCO sign-off. (chosen by the user among the alternatives offered, 2026-11-27)
 - Privilege model: the application runs without administrator rights and relaunches itself elevated only to apply changes. (chosen by the user among the alternatives offered; recorded as a decision in Phase 4)
 - Every action that changes system state records the previous state first, so that it can be reverted. (stated by the user)
 - Automated tests at the unit, integration, and end-to-end levels, wherever each level applies. (stated by the user, added after Phase 1 approval)
