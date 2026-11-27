@@ -20,7 +20,7 @@ The decisions that govern this repository live in `docs/`. Read them before chan
 | `docs/03-architecture.md`         | crate boundaries, conventions, decision index        |
 | `docs/04-quality.md`              | quality attributes, measurements, verification log   |
 | `docs/features/find-feature-ids/` | requirements, stories, plan, and decisions of the first feature |
-| `docs/features/published-lists/`  | decisions for the `flagscope/feature-lists` data repository |
+| `docs/features/published-lists/`  | requirements, stories, plan, and decisions of the published-lists feature |
 
 Inside each feature folder the files are `requirements.md`, `stories.md`, `plan.md`, and `decisions.md`.
 

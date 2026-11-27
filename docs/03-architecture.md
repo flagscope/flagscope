@@ -15,11 +15,11 @@ flagscope is a Cargo workspace of small crates. Library crates hold all the logi
 | `flagscope-core` | library | Domain types (`FeatureId`, `FeatureName`, `Build`, `FeatureList`) and the mach2 text format (parse and serialise). No I/O beyond `std::io` readers and writers. | The network, the file system layout, PDBs, Windows APIs, any user interface. |
 | `flagscope-symbols` | library | Reading the CodeView debug information (PDB name, GUID, age) from PE files; the Microsoft symbol server client (URL, size query, download); the temporary symbol-file directory. | Feature names or IDs, list caching, any user interface. |
 | `flagscope-scanner` | library | Extracting `Name: ID` pairs from a PDB and its binary; the scan pipeline (choosing binaries, estimate, download, extraction, de-duplication, saving the list per build, deleting symbol files); scan progress events. | How progress or results are displayed; the Windows feature store. |
-| `flagscope-cli` | binary (`flagscope`) | Command-line arguments, console output, exit codes, the output file. | Symbol-server details, PDB parsing. It calls `flagscope-scanner` only. |
+| `flagscope-cli` | binary (`flagscope`) | Command-line arguments, console output, exit codes, the output file. | Symbol-server details, PDB parsing. It calls `flagscope-scanner`, and uses `flagscope-core` only for the domain types and the list format. |
 | `flagscope-store` (later, `toggle-features-safely`) | library | FFI to the feature configuration functions of `ntdll.dll`, snapshots, revert. | The scanner, any user interface. |
 | `flagscope-gui` (later, `desktop-app`) | binary | The GPUI user interface. | Anything below the public APIs of the library crates. |
 
-Dependency direction: `flagscope-cli` → `flagscope-scanner` → `flagscope-symbols` and `flagscope-core`. No library crate depends on a binary crate. Library crates do not depend on each other in a cycle.
+Dependency direction: `flagscope-cli` → `flagscope-scanner` → `flagscope-symbols` and `flagscope-core`; `flagscope-cli` also uses `flagscope-core`. No library crate depends on a binary crate. Library crates do not depend on each other in a cycle.
 
 ## Conventions
 
@@ -66,3 +66,4 @@ Dependency direction: `flagscope-cli` → `flagscope-scanner` → `flagscope-sym
 | AD-14 | Merge features found in several binaries and report conflicting IDs | `features/find-feature-ids/decisions.md` |
 | AD-15 | Parse command-line arguments with `clap` | `features/find-feature-ids/decisions.md` |
 | AD-16 | Store published lists as one text file per build, grouped by architecture and major build | `features/published-lists/decisions.md` |
+| AD-17 | `flagscope scan` uses the saved list by default; `--keep-symbol-files` implies a new scan | `features/find-feature-ids/decisions.md` |

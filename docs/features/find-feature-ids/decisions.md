@@ -103,7 +103,7 @@ Alternatives considered:
 - `%APPDATA%` (roaming): lists are machine-specific and symbol files are large; roaming them is wasteful.
 - The system temporary folder for symbols: may be cleaned at any time and is shared with other applications.
 Decision: `%LOCALAPPDATA%\flagscope\lists\<build>.txt` for saved lists, in the mach2 format, and `%LOCALAPPDATA%\flagscope\symbols\` for downloaded symbol files. The location is read from the environment with the standard library.
-Consequences: no extra dependency. Deleting the folder resets the tool. The user can read and share saved lists directly.
+Consequences: no extra dependency. Deleting the folder resets the tool. The user can read and share saved lists directly. Each scan stores its symbol files in its own `symbols\scan-<process ID>` subfolder, so two scans running at the same time never share files (found during HU-05 verification on 2026-11-26, when two concurrent scans failed with a sharing violation).
 Status: active
 
 ## AD-10: Report scan progress through an observer trait
@@ -172,4 +172,15 @@ Alternatives considered:
 - `argh` or `lexopt`: smaller, but less common among contributors and with fewer features for help and validation.
 Decision: `clap` 4 (MIT OR Apache-2.0) with its derive API, only in `flagscope-cli`.
 Consequences: Help text and argument errors come from `clap` in English; when the user-interface translation layer arrives, they are reviewed against RNF-02. Library crates never depend on `clap`.
+Status: active
+
+## AD-17: `flagscope scan` uses the saved list by default; `--keep-symbol-files` implies a new scan
+
+Date: 2026-11-26
+Context: HU-05 adds saved lists (RF-07) and the option to keep symbol files (RF-12.2). With a saved list, `flagscope scan` normally downloads nothing, so an option to keep downloaded files would have no effect.
+Alternatives considered:
+- A separate command for loading a saved list (`flagscope list`) and `scan` always scanning: clearer names, but the common case ("give me the list") would need the user to know whether a list exists.
+- Reject `--keep-symbol-files` without `--rescan`: explicit, but makes the user repeat an intention the first option already states.
+Decision: `flagscope scan` returns the saved list of the installed build when it exists and scans otherwise; `--rescan` forces a scan; `--keep-symbol-files` keeps the downloaded files and implies `--rescan`. A saved list is written to a temporary file and renamed, so no partial list is ever left (RF-06.3).
+Consequences: the command name says "scan" even when it only loads a list; the messages say which happened. When published lists arrive (RF-14), the same command gains a third source, and this decision is revisited.
 Status: active

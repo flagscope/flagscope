@@ -34,7 +34,7 @@ Covers: RF-06.1, RF-06.3, RNF-01.1, RNF-04.1
 3. CA-02.3: The scan completes when started from a console that is not running as administrator.
 4. CA-02.4: With the network disconnected and no saved list for the build, the tool prints a message naming the missing connection, exits with a non-zero exit code, and leaves no list file behind.
 
-**Status.** verified
+**Status.** in progress
 
 ## HU-03: Get the list as a file and on the console
 
@@ -48,7 +48,7 @@ Covers: RF-11.1, RF-11.2
 2. CA-03.2: The entries printed to the console are the same as the entries in the file, in the same order.
 3. CA-03.3: When the given file already exists, the tool does not overwrite it unless the user passes the explicit overwrite option. (proposed by the assistant, accepted with the approval of this feature)
 
-**Status.** pending
+**Status.** verified
 
 ## HU-04: See the estimate and the progress of a scan
 
@@ -78,4 +78,4 @@ Covers: RF-07.1, RF-07.2, RF-12.1, RF-12.2, RNF-08.1
 4. CA-05.4: After a scan with the keep option, every symbol file downloaded by that scan remains on disk.
 5. CA-05.5: Every scan prints the peak additional disk space it used.
 
-**Status.** pending
+**Status.** in progress

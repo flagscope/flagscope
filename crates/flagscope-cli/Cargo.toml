@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 clap.workspace = true
+flagscope-core.workspace = true
 flagscope-scanner.workspace = true
 
 [lints]

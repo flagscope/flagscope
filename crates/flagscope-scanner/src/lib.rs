@@ -7,11 +7,15 @@
 mod build;
 mod candidates;
 mod descriptor;
+mod lists;
 mod pdb_symbols;
 mod scan;
 
 pub use build::installed_build;
-pub use scan::{Conflict, ScanOptions, ScanReport, ScanStats, scan_installed_build};
+pub use scan::{
+    Conflict, FeatureList, ListSource, ScanOptions, ScanReport, ScanStats, feature_list,
+    scan_installed_build,
+};
 
 use std::fs;
 use std::io;

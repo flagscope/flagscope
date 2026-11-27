@@ -8,24 +8,29 @@ use std::path::{Path, PathBuf};
 use flagscope_core::{Build, Feature, FeatureId};
 use flagscope_symbols::SymbolServer;
 
-use crate::{Error, build, candidates, extract_features};
+use crate::{Error, build, candidates, extract_features, lists};
 
 /// Where and how a scan runs.
 #[derive(Debug, Clone)]
 pub struct ScanOptions {
     /// The Windows directory, usually `C:\Windows`.
     pub system_root: PathBuf,
-    /// Directory for downloaded symbol files. Each file is deleted once its
-    /// features have been extracted.
+    /// Directory for downloaded symbol files.
     pub symbol_directory: PathBuf,
+    /// Keep downloaded symbol files instead of deleting each one once its
+    /// features have been extracted (RF-12).
+    pub keep_symbol_files: bool,
+    /// Directory of saved lists, one `<build>.txt` per build (AD-09).
+    pub lists_directory: PathBuf,
     /// The symbol server to download from.
     pub server: SymbolServer,
 }
 
 impl ScanOptions {
     /// Options for scanning this machine: `%SystemRoot%`, Microsoft's public
-    /// symbol server, and `%LOCALAPPDATA%\flagscope\symbols` for temporary
-    /// symbol files (AD-09).
+    /// symbol server, `%LOCALAPPDATA%\flagscope\symbols` for symbol files, and
+    /// `%LOCALAPPDATA%\flagscope\lists` for saved lists (AD-09). Symbol files
+    /// are deleted after use.
     ///
     /// # Errors
     ///
@@ -36,9 +41,12 @@ impl ScanOptions {
                 .map(PathBuf::from)
                 .ok_or(Error::Environment { variable: name })
         };
+        let data = variable("LOCALAPPDATA")?.join("flagscope");
         Ok(Self {
             system_root: variable("SystemRoot")?,
-            symbol_directory: variable("LOCALAPPDATA")?.join("flagscope").join("symbols"),
+            symbol_directory: data.join("symbols"),
+            keep_symbol_files: false,
+            lists_directory: data.join("lists"),
             server: SymbolServer::microsoft(),
         })
     }
@@ -66,8 +74,12 @@ pub struct ScanStats {
     pub unreadable_pdbs: usize,
     /// Feature names whose descriptor could not be read from the binary.
     pub unreadable_descriptors: usize,
+    /// Symbol files downloaded.
+    pub symbol_files_downloaded: usize,
     /// Total bytes of symbol files downloaded.
     pub downloaded_bytes: u64,
+    /// Largest amount of disk space the scan's symbol files took at one time.
+    pub peak_disk_bytes: u64,
 }
 
 /// The result of scanning a build.
@@ -81,13 +93,18 @@ pub struct ScanReport {
     pub conflicts: Vec<Conflict>,
     /// What the scan did.
     pub stats: ScanStats,
+    /// Where this scan stored its symbol files; it only exists afterwards when
+    /// [`ScanOptions::keep_symbol_files`] was set.
+    pub symbol_directory: PathBuf,
 }
 
-/// Scans the installed build and returns its feature list.
+/// Scans the installed build and returns its feature list, without reading or
+/// saving lists (see [`feature_list`] for that).
 ///
-/// Nothing is written except temporary symbol files, which are deleted as the
-/// scan goes. The scan stops at the first download that fails for any reason
-/// other than the PDB not being published, so it never returns a partial list.
+/// Symbol files are deleted as the scan goes unless
+/// [`ScanOptions::keep_symbol_files`] is set. The scan stops at the first
+/// download that fails for any reason other than the PDB not being published,
+/// deletes the symbol files it downloaded, and returns no list.
 ///
 /// # Errors
 ///
@@ -98,6 +115,13 @@ pub fn scan_installed_build(options: &ScanOptions) -> Result<ScanReport, Error> 
     let build = build::installed_build()?;
     let mut stats = ScanStats::default();
     let mut found: BTreeMap<String, BTreeMap<FeatureId, Vec<PathBuf>>> = BTreeMap::new();
+    // Directories this scan created, so that a failed scan removes only its own files.
+    let mut created: Vec<PathBuf> = Vec::new();
+    let mut disk_bytes: u64 = 0;
+    // One directory per process, so that two scans running at once never share files.
+    let run_directory = options
+        .symbol_directory
+        .join(format!("scan-{}", std::process::id()));
 
     for binary in candidates::system_binaries(&options.system_root) {
         stats.binaries_examined += 1;
@@ -105,9 +129,7 @@ pub fn scan_installed_build(options: &ScanOptions) -> Result<ScanReport, Error> 
             continue;
         };
         // One directory per PDB identity: different binaries can share a PDB file name.
-        let directory = options
-            .symbol_directory
-            .join(reference.server_path().replace('/', "_"));
+        let directory = run_directory.join(reference.server_path().replace('/', "_"));
         let pdb = match options.server.download(&reference, &directory) {
             Ok(pdb) => pdb,
             Err(flagscope_symbols::Error::Status { status: 404, .. }) => {
@@ -115,17 +137,24 @@ pub fn scan_installed_build(options: &ScanOptions) -> Result<ScanReport, Error> 
                 continue;
             }
             Err(flagscope_symbols::Error::Connection { url, .. }) => {
-                remove_directory(&options.symbol_directory);
+                remove_all(&created, &run_directory, &options.symbol_directory);
                 return Err(Error::NoConnection { url });
             }
             Err(source) => {
-                remove_directory(&options.symbol_directory);
+                remove_all(&created, &run_directory, &options.symbol_directory);
                 return Err(Error::Download { source });
             }
         };
+        created.push(directory.clone());
+        stats.symbol_files_downloaded += 1;
         stats.downloaded_bytes += pdb.size;
+        disk_bytes += pdb.size;
+        stats.peak_disk_bytes = stats.peak_disk_bytes.max(disk_bytes);
         let extraction = extract_features(&pdb.path, &binary);
-        remove_directory(&directory);
+        if !options.keep_symbol_files {
+            remove_directory(&directory);
+            disk_bytes -= pdb.size;
+        }
         match extraction {
             Ok(extraction) => {
                 stats.binaries_scanned += 1;
@@ -140,10 +169,14 @@ pub fn scan_installed_build(options: &ScanOptions) -> Result<ScanReport, Error> 
                 }
             }
             Err(Error::Pdb { .. } | Error::Binary { .. }) => stats.unreadable_pdbs += 1,
-            Err(error) => return Err(error),
+            Err(error) => {
+                remove_all(&created, &run_directory, &options.symbol_directory);
+                return Err(error);
+            }
         }
     }
-    // Removes the scan's directory if the scan left it empty.
+    // Removes the scan's directories if nothing is left in them.
+    let _ = fs::remove_dir(&run_directory);
     let _ = fs::remove_dir(&options.symbol_directory);
 
     let (features, conflicts) = merge(found);
@@ -152,6 +185,7 @@ pub fn scan_installed_build(options: &ScanOptions) -> Result<ScanReport, Error> 
         features,
         conflicts,
         stats,
+        symbol_directory: run_directory,
     })
 }
 
@@ -170,6 +204,67 @@ fn candidate_reference(binary: &Path) -> Option<flagscope_symbols::PdbReference>
 /// result does not depend on them.
 fn remove_directory(directory: &Path) {
     let _ = fs::remove_dir_all(directory);
+}
+
+/// Deletes the directories a failed scan created, then its run directory and
+/// the symbol directory if they are left empty.
+fn remove_all(created: &[PathBuf], run_directory: &Path, symbol_directory: &Path) {
+    for directory in created {
+        remove_directory(directory);
+    }
+    let _ = fs::remove_dir(run_directory);
+    let _ = fs::remove_dir(symbol_directory);
+}
+
+/// Where a feature list came from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ListSource {
+    /// Loaded from the list saved by an earlier scan; nothing was downloaded.
+    Saved,
+    /// Produced by a scan now, and saved for later runs.
+    Scanned(Box<ScanReport>),
+}
+
+/// A feature list for the installed build.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FeatureList {
+    /// The installed build.
+    pub build: Build,
+    /// The features, sorted by name.
+    pub features: Vec<Feature>,
+    /// Where the list is saved.
+    pub saved_at: PathBuf,
+    /// Whether the list was loaded or scanned.
+    pub source: ListSource,
+}
+
+/// Returns the feature list of the installed build: the saved one when it
+/// exists and `rescan` is false (RF-07.1), otherwise a new scan, which is then
+/// saved (RF-07.2).
+///
+/// # Errors
+///
+/// Returns the errors of [`scan_installed_build`], and [`Error::Io`] if the
+/// saved list cannot be read or the new one cannot be saved.
+pub fn feature_list(options: &ScanOptions, rescan: bool) -> Result<FeatureList, Error> {
+    let build = build::installed_build()?;
+    let saved_at = lists::path(&options.lists_directory, build);
+    if !rescan && let Some(features) = lists::load(&saved_at)? {
+        return Ok(FeatureList {
+            build,
+            features,
+            saved_at,
+            source: ListSource::Saved,
+        });
+    }
+    let report = scan_installed_build(options)?;
+    lists::save(&saved_at, &report.features)?;
+    Ok(FeatureList {
+        build: report.build,
+        features: report.features.clone(),
+        saved_at,
+        source: ListSource::Scanned(Box::new(report)),
+    })
 }
 
 /// Splits names into single-ID features and conflicts (AD-14).
