@@ -32,7 +32,7 @@ Covers: RNF-07.1
 1. CA-14.1: A pull request whose tests pass shows the test check as passed, and its log shows the unit, integration, and end-to-end tests run on a Windows x64 runner.
 2. CA-14.2: A pull request with one failing test shows the test check as failed, and its log names the test.
 
-**Status.** in progress
+**Status.** verified
 
 ## HU-15: Sign-off and human authorship are checked on every pull request
 
@@ -47,7 +47,7 @@ Covers: RNF-09.1
 3. CA-15.3: A pull request with one commit whose `Co-authored-by:` names an AI tool shows the check as failed, and its log names that commit.
 4. CA-15.4: Merge commits created by GitHub when merging earlier pull requests do not make the check fail.
 
-**Status.** in progress
+**Status.** verified
 
 ## HU-16: Secrets are caught before they reach the default branch
 
@@ -60,7 +60,7 @@ Covers: RNF-06.1
 1. CA-16.1: A pull request without secrets shows the secret-scan check as passed.
 2. CA-16.2: A pull request that adds a file containing a fake credential in a well-known format shows the check as failed, and its log names the file. The fake credential is not a real one and is removed with the branch.
 
-**Status.** in progress
+**Status.** verified
 
 ## HU-17: The default branch only takes checked pull requests
 
