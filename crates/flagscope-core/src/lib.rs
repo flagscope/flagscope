@@ -246,3 +246,10 @@ mod tests {
         assert_eq!(feature.to_string(), "FileExplorerNavpaneFixes: 40767182");
     }
 }
+
+/// Deliberate linter warning for CA-13.3; never merged.
+#[must_use]
+pub fn ci_lint_probe() -> bool {
+    let value = 1;
+    value == value
+}
