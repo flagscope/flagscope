@@ -22,6 +22,7 @@ The decisions that govern this repository live in `docs/`. Read them before chan
 | `docs/features/find-feature-ids/` | requirements, stories, plan, and decisions of the first feature |
 | `docs/features/lighter-scans/`    | requirements, stories, plan, and decisions of the lighter-scans feature |
 | `docs/features/published-lists/`  | requirements, stories, plan, and decisions of the published-lists feature |
+| `docs/features/contributor-quality-gates/` | requirements, stories, plan, and decisions of the continuous-integration checks |
 
 Inside each feature folder the files are `requirements.md`, `stories.md`, `plan.md`, and `decisions.md`.
 
