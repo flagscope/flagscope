@@ -75,9 +75,22 @@ impl ScanObserver for NoObserver {
     fn progressed(&mut self, _progress: &Progress) {}
 }
 
-/// Expected duration of downloading `files` files of `bytes` bytes in total,
-/// from the measured time per request and transfer speed.
+/// Expected duration of sending `files` requests for `bytes` bytes in total,
+/// from the measured time per request and the transfer speed of one
+/// connection, when `parallel` downloads run at the same time.
 pub(crate) fn expected_duration(
+    files: usize,
+    bytes: u64,
+    per_request: Duration,
+    bytes_per_second: f64,
+    parallel: usize,
+) -> Duration {
+    let parallel = u32::try_from(parallel.max(1)).unwrap_or(u32::MAX);
+    sequential_duration(files, bytes, per_request, bytes_per_second) / parallel
+}
+
+/// Expected duration when requests run one after another.
+fn sequential_duration(
     files: usize,
     bytes: u64,
     per_request: Duration,
@@ -126,10 +139,20 @@ mod tests {
 
     #[test]
     fn expected_duration_adds_request_time_and_transfer_time() {
-        let duration = expected_duration(10, 1_000_000, Duration::from_millis(400), 100_000.0);
+        let duration = expected_duration(10, 1_000_000, Duration::from_millis(400), 100_000.0, 1);
         assert_eq!(duration, Duration::from_secs(14));
         assert_eq!(
-            expected_duration(2, 10, Duration::from_secs(1), 0.0),
+            expected_duration(2, 10, Duration::from_secs(1), 0.0, 1),
+            Duration::from_secs(2)
+        );
+    }
+
+    #[test]
+    fn expected_duration_divides_by_parallel_downloads() {
+        let duration = expected_duration(10, 1_000_000, Duration::from_millis(400), 100_000.0, 7);
+        assert_eq!(duration, Duration::from_secs(2));
+        assert_eq!(
+            expected_duration(2, 10, Duration::from_secs(1), 0.0, 0),
             Duration::from_secs(2)
         );
     }

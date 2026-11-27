@@ -175,6 +175,9 @@ pub fn scan_installed_build(
     observer: &mut dyn ScanObserver,
 ) -> Result<ScanReport, Error> {
     let build = build::installed_build()?;
+    // Checked before reading thousands of binaries, so that a missing
+    // connection is reported in seconds rather than after a minute.
+    options.server.check_reachable().map_err(download_error)?;
     let mode = options.effective_mode();
     let mut stats = ScanStats::default();
     // One directory per process, so that two scans running at once never share files.
@@ -215,7 +218,13 @@ pub fn scan_installed_build(
     observer.estimated(&Estimate {
         files: work.len(),
         bytes: bytes_total,
-        duration: expected_duration(requests, bytes_total, planning.per_request, speed),
+        duration: expected_duration(
+            requests,
+            bytes_total,
+            planning.per_request,
+            speed,
+            DOWNLOAD_WORKERS,
+        ),
         planning_bytes: planning.bytes,
     });
 

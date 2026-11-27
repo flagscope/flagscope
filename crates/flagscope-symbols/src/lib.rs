@@ -8,6 +8,9 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+/// Longest wait for the first answer of the server before a scan.
+pub const REACHABILITY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
 /// Base URL of Microsoft's public symbol server.
 pub const MICROSOFT_SYMBOL_SERVER: &str = "https://msdl.microsoft.com/download/symbols";
 
@@ -177,6 +180,30 @@ impl SymbolServer {
     #[must_use]
     pub fn microsoft() -> Self {
         Self::new(MICROSOFT_SYMBOL_SERVER)
+    }
+
+    /// Checks that the server answers at all, waiting at most
+    /// [`REACHABILITY_TIMEOUT`]. Any HTTP answer, even an error status, counts.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Connection`] if the server cannot be reached.
+    pub fn check_reachable(&self) -> Result<(), Error> {
+        let url = format!("{}/", self.base_url);
+        let answer = self
+            .agent
+            .head(&url)
+            .config()
+            .timeout_global(Some(REACHABILITY_TIMEOUT))
+            .build()
+            .call();
+        match answer {
+            Ok(_) | Err(ureq::Error::StatusCode(_)) => Ok(()),
+            Err(source) => Err(Error::Connection {
+                url,
+                source: Box::new(source),
+            }),
+        }
     }
 
     /// Returns the size in bytes of the PDB on the server, without downloading

@@ -27,3 +27,15 @@ Alternatives considered:
 Decision: `%LOCALAPPDATA%\flagscope\results\<pdb name>_<GUID><age>_<pdb name>.txt`, one file per distinct symbol file, in the mach2 line format with a title line and one `# unreadable: <name>` line per name without a readable descriptor. Results are written through a temporary file and a rename. A missing or unreadable result file means the symbol file is read again. Stored results are not used when keeping symbol files, because those files must be downloaded.
 Consequences: a second scan of an unchanged build downloads nothing (sample of three symbol files: 0 bytes, under 1 ms). The folder grows with every build scanned and nothing prunes it yet; deleting it only makes the next scan download again. A wrong stored result would be reused until the file is deleted, so a later story may add a way to ignore stored results.
 Status: active
+
+## AD-21: Check that the symbol server answers before reading the system binaries, and divide the duration estimate by the parallel downloads
+
+Date: 2026-11-26
+Context: in the verification batch, the duration estimate said about 37 minutes for a scan that took 6, because AD-18's formula assumed one request at a time while AD-19 downloads eight at a time. Without a network, the user saw the error only after a delay: a scan reads about 6,000 binaries (about 45 seconds) before its first request.
+Alternatives considered:
+- Leave the estimate as it was: simple, but it overstates the duration about six times.
+- Measure the aggregate speed with eight parallel sample downloads: more precise, but more requests before every scan.
+- Check the connection only when a request is needed: lets a scan whose results are all stored finish without a network, but a missing connection is still reported only after the binaries are read.
+Decision: the duration estimate is AD-18's sequential estimate divided by the number of parallel downloads. Before reading any binary, a scan sends one `HEAD` request to the symbol server with a 10-second limit; any HTTP answer counts as reachable, and no answer stops the scan with the no-connection message.
+Consequences: on 14 symbol files the estimate said 3 s and the download took 4 s. A scan without a network fails within about 10 seconds. A rescan whose results are all stored now needs the network too; loading a saved list (without `--rescan`) still works offline.
+Status: active
