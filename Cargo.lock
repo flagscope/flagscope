@@ -273,6 +273,7 @@ dependencies = [
  "ms-pdb",
  "object",
  "thiserror",
+ "ureq",
  "windows-registry",
 ]
 

@@ -26,3 +26,15 @@ Alternatives considered:
 Decision: a saved list starts with the AD-16 header (title, build, architecture, generator with flagscope version and scan mode, UTC scan date), then `# Source: scanned on this machine` when it came from a scan here, then the `Name: ID` lines. `flagscope contribute <folder>` copies the header and the lines to `<folder>/<architecture>/<major>/<build>.txt`, without the source line, and refuses lists without that line or without a header; it never overwrites an existing file. Readers of saved lists skip `#` lines, so loading is unchanged.
 Consequences: lists saved before HU-06 must be scanned again before they can be contributed (a rescan with stored results takes under a minute). Published lists saved by HU-07 will carry a different source line and stay non-contributable. The architecture is written as `x64`, the only one flagscope supports (RNF-01).
 Status: active
+
+## AD-23: Download published lists from the raw-file URL of `main`, validate them, and save them as non-contributable local lists
+
+Date: 2026-11-27
+Context: HU-07 uses the list published in `flagscope/feature-lists` when no list is saved locally (RF-14). The file comes from the Internet, and anyone can propose a list through a pull request.
+Alternatives considered:
+- The GitHub REST API (`/repos/.../contents/...`): returns metadata too, but anonymous use is limited to 60 requests per hour per IP address.
+- GitHub Pages or release assets: another publishing step to maintain for every merged list.
+- Trust the downloaded file as it is: simplest, but a malformed or mismatched file would become the local list.
+Decision: the list is fetched from `https://raw.githubusercontent.com/flagscope/feature-lists/main/<architecture>/<major>/<build>.txt` with the Windows TLS stack and a 60-second limit. HTTP 404 means "not published" and the scan follows; any other failure stops with a message that names `flagscope/feature-lists`. A downloaded file is accepted only if it is UTF-8, at most 16 MB, starts with an AD-16 header for exactly the installed build and `x64`, and contains only `Name: ID` lines with unique names. It is saved as the local list with the line `# Source: flagscope/feature-lists`, so later runs need no network and `contribute` refuses it (AD-22). `--rescan` and targeted scans never use published lists.
+Consequences: a list merged a few minutes ago may still be missing from `raw.githubusercontent.com` (observed after PR #1); flagscope then scans, as for an unpublished build. Lists are trusted as far as the repository review goes: the validation catches malformed or mismatched files, not wrong IDs in a well-formed file.
+Status: active

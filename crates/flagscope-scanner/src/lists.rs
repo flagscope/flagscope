@@ -12,7 +12,10 @@ use crate::Error;
 
 /// Line that marks a saved list as produced by a scan on this machine. It is
 /// not copied into contributions.
-const SCANNED_HERE: &str = "# Source: scanned on this machine";
+pub(crate) const SCANNED_HERE: &str = "# Source: scanned on this machine";
+/// Line that marks a saved list as downloaded from `flagscope/feature-lists`
+/// (AD-23). Such lists cannot be contributed (AD-22).
+pub(crate) const PUBLISHED: &str = "# Source: flagscope/feature-lists";
 
 /// The file that holds the saved list of `build`.
 pub(crate) fn path(directory: &Path, build: Build) -> PathBuf {
@@ -35,13 +38,17 @@ pub(crate) fn load(path: &Path) -> Result<Option<Vec<Feature>>, Error> {
         .map_err(io_error)
 }
 
-/// Saves a list produced by a scan on this machine at `path`, with its header
-/// and the mark that it was scanned here, replacing any earlier list for the
-/// build.
+/// Saves a list at `path` with its header and the `source` line that says
+/// where it came from, replacing any earlier list for the build.
 ///
 /// The list is written to a temporary file first and then renamed, so an
 /// interrupted save never leaves a partial list behind (RF-06.3).
-pub(crate) fn save(path: &Path, header: &ListHeader, features: &[Feature]) -> Result<(), Error> {
+pub(crate) fn save(
+    path: &Path,
+    header: &ListHeader,
+    source: &str,
+    features: &[Feature],
+) -> Result<(), Error> {
     let io_error = |source| Error::Io {
         path: path.to_owned(),
         source,
@@ -57,7 +64,7 @@ pub(crate) fn save(path: &Path, header: &ListHeader, features: &[Feature]) -> Re
             for line in header.lines() {
                 writeln!(file, "{line}")?;
             }
-            writeln!(file, "{SCANNED_HERE}")?;
+            writeln!(file, "{source}")?;
             flagscope_core::write_list(file, features)
         })
         .and_then(|()| fs::rename(&temporary, path));
@@ -199,7 +206,7 @@ mod tests {
             name: "Alpha".to_owned(),
             id: FeatureId(1),
         }];
-        save(&file, &header(), &features).unwrap();
+        save(&file, &header(), SCANNED_HERE, &features).unwrap();
         assert_eq!(load(&file).unwrap(), Some(features));
         assert!(
             !file
@@ -219,7 +226,7 @@ mod tests {
             name: "Alpha".to_owned(),
             id: FeatureId(1),
         }];
-        save(&saved, &header(), &features).unwrap();
+        save(&saved, &header(), SCANNED_HERE, &features).unwrap();
 
         let written = prepare_contribution(&saved, &out).unwrap();
         assert!(written.ends_with(Path::new("x64/26300/26300.10075.txt")));

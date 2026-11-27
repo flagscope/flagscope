@@ -14,7 +14,8 @@ use flagscope_symbols::{PdbReference, SymbolServer};
 use crate::pdb_symbols::{self, PartialError, PartialPlan};
 use crate::progress::{Estimate, Progress, ScanObserver, expected_duration};
 use crate::{
-    Error, Extraction, build, candidates, extract_features, lists, read_descriptors, results,
+    Error, Extraction, build, candidates, extract_features, lists, published, read_descriptors,
+    results,
 };
 
 /// Concurrent requests while planning a scan (AD-18, AD-19).
@@ -54,6 +55,8 @@ pub struct ScanOptions {
     pub lists_directory: PathBuf,
     /// Directory of stored results, one file per distinct symbol file (AD-20).
     pub results_directory: PathBuf,
+    /// Base URL of the published lists (RF-14, AD-23).
+    pub published_lists_url: String,
     /// The symbol server to download from.
     pub server: SymbolServer,
 }
@@ -82,6 +85,7 @@ impl ScanOptions {
             keep_symbol_files: false,
             lists_directory: data.join("lists"),
             results_directory: data.join("results"),
+            published_lists_url: published::FEATURE_LISTS_URL.to_owned(),
             server: SymbolServer::microsoft(),
         })
     }
@@ -742,6 +746,9 @@ fn remove_all(created: &[PathBuf], run_directory: &Path, symbol_directory: &Path
 pub enum ListSource {
     /// Loaded from the list saved by an earlier scan; nothing was downloaded.
     Saved,
+    /// Downloaded from `flagscope/feature-lists` and saved for later runs;
+    /// nothing was scanned (RF-14).
+    Published(Box<ListHeader>),
     /// Produced by a scan now, and saved for later runs.
     Scanned(Box<ScanReport>),
     /// Produced by a targeted scan of some binaries only; not saved
@@ -762,9 +769,11 @@ pub struct FeatureList {
     pub source: ListSource,
 }
 
-/// Returns the feature list of the installed build: the saved one when it
-/// exists and `rescan` is false (RF-07.1), otherwise a new scan, which is then
-/// saved (RF-07.2). A targeted scan ([`ScanOptions::binaries`]) always scans
+/// Returns the feature list of the installed build. Without `rescan`, the
+/// sources are tried in this order (RF-14.1): the list saved on this machine
+/// (RF-07.1), the list published in `flagscope/feature-lists` (RF-14), and a
+/// new scan. A downloaded or scanned list is saved for later runs; `rescan`
+/// always scans (RF-07.2). A targeted scan ([`ScanOptions::binaries`]) always scans
 /// and never saves (RF-16.4).
 ///
 /// # Errors
@@ -795,6 +804,26 @@ pub fn feature_list(
             source: ListSource::Saved,
         });
     }
+    if !rescan {
+        let published =
+            published::fetch(&options.published_lists_url, build).map_err(|error| match error {
+                published::PublishedError::Unreachable { url, reason } => {
+                    Error::PublishedUnreachable { url, reason }
+                }
+                published::PublishedError::Invalid { url, reason } => {
+                    Error::PublishedInvalid { url, reason }
+                }
+            })?;
+        if let Some(list) = published {
+            lists::save(&saved_at, &list.header, lists::PUBLISHED, &list.features)?;
+            return Ok(FeatureList {
+                build,
+                features: list.features,
+                saved_at,
+                source: ListSource::Published(Box::new(list.header)),
+            });
+        }
+    }
     let report = scan_installed_build(options, observer)?;
     let mode = match options.effective_mode() {
         ScanMode::Light => "light",
@@ -807,7 +836,7 @@ pub fn feature_list(
         generator: format!("flagscope {}, {mode} scan", env!("CARGO_PKG_VERSION")),
         scanned: lists::today(),
     };
-    lists::save(&saved_at, &header, &report.features)?;
+    lists::save(&saved_at, &header, lists::SCANNED_HERE, &report.features)?;
     Ok(FeatureList {
         build: report.build,
         features: report.features.clone(),
