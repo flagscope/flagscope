@@ -1,0 +1,73 @@
+# Checks every pull request against the rules of CONTRIBUTING.md that a machine
+# can check (contributor-quality-gates, AD-24). Tools are pinned: actions by
+# commit, the Rust toolchain by version, gitleaks by version and checksum.
+name: checks
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  RUST_TOOLCHAIN: "1.100.0"
+  CARGO_TERM_COLOR: always
+
+jobs:
+  format-and-lint:
+    name: Formatting and lints
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Rust ${{ env.RUST_TOOLCHAIN }}
+        run: |
+          rustup toolchain install ${{ env.RUST_TOOLCHAIN }} --profile minimal --component rustfmt,clippy
+          rustup default ${{ env.RUST_TOOLCHAIN }}
+      - name: Formatting (cargo fmt)
+        run: cargo fmt --all --check
+      - name: Lints (cargo clippy)
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  tests:
+    name: Tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Rust ${{ env.RUST_TOOLCHAIN }}
+        run: |
+          rustup toolchain install ${{ env.RUST_TOOLCHAIN }} --profile minimal
+          rustup default ${{ env.RUST_TOOLCHAIN }}
+      - name: Library crates on their own (unit and integration tests)
+        run: cargo test --locked -p flagscope-core -p flagscope-symbols -p flagscope-scanner
+      - name: Command-line interface (unit and end-to-end tests)
+        run: cargo test --locked -p flagscope-cli
+
+  authorship:
+    name: Sign-off and authorship
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Check every commit of the pull request
+        run: bash .github/scripts/check-commits.sh "origin/${{ github.base_ref }}" HEAD
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: "8.30.1"
+      GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks ${{ env.GITLEAKS_VERSION }}
+        run: |
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$archive" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}"
+          echo "${GITLEAKS_SHA256}  ${archive}" | sha256sum --check
+          tar -xzf "$archive" gitleaks
+      - name: Scan the commits of the pull request
+        run: ./gitleaks git --log-opts="origin/${{ github.base_ref }}..HEAD" --redact --verbose --exit-code 1
