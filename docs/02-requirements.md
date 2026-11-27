@@ -141,3 +141,8 @@ Source: user statement, unit, integration, and end-to-end tests.
 
 No stated target. The size of the symbol files is measured in the scanner proof of concept, and the user sets the threshold from that measurement. The estimate in RF-13 shows the expected size before every scan.
 Source: user statement, the user rejected a 1 GB limit because the average size of the files is not known yet.
+
+### RNF-09: Contribution rules enforced
+
+The repository must accept only contributions that follow the rules of `CONTRIBUTING.md` a machine can check, measured as: every commit added by a pull request, except merge commits created by GitHub, carries a DCO sign-off and names no AI tool as author, committer, signer, or co-author; and the default branch accepts changes only through pull requests whose checks have passed.
+Source: user statements: every commit carries a DCO sign-off; commits are authored by a human, never under an AI identity; changes reach the default branch only through pull requests; merge commits created by GitHub are exempt.
