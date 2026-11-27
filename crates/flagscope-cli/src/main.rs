@@ -54,6 +54,13 @@ enum Command {
         #[arg(long = "binary", value_name = "NAME")]
         binaries: Vec<String>,
     },
+    /// Copy the scanned list of the installed build into a clone of
+    /// flagscope/feature-lists, at <architecture>/<major>/<build>.txt, ready for a pull request.
+    Contribute {
+        /// The root folder of your clone of flagscope/feature-lists.
+        #[arg(value_name = "FOLDER")]
+        repository: PathBuf,
+    },
 }
 
 /// Errors of the command-line interface.
@@ -91,6 +98,7 @@ fn main() -> ExitCode {
             full,
             binaries,
         ),
+        Command::Contribute { repository } => contribute(&repository),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -99,6 +107,15 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// Prepares the saved list of the installed build for a pull request to
+/// flagscope/feature-lists.
+fn contribute(repository: &Path) -> Result<(), CliError> {
+    let options = ScanOptions::for_this_machine()?;
+    let written = flagscope_scanner::prepare_contribution(&options, repository)?;
+    eprintln!("{}", messages::contribution_written(&written));
+    Ok(())
 }
 
 /// Gets the feature list of the installed build (saved or scanned), prints it,

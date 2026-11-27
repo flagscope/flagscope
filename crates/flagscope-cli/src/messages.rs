@@ -211,6 +211,22 @@ fn completeness(files: usize, incomplete: usize) -> String {
 /// Shown when a command fails.
 pub fn error(error: &Error) -> String {
     match error {
+        Error::NoSavedList { path } => format!(
+            "Error: no list is saved for this build ({}). Run `flagscope scan` first. \
+             Nothing was written.",
+            path.display()
+        ),
+        Error::NotScannedHere { path } => format!(
+            "Error: the saved list {} does not record a scan on this machine, so it cannot be \
+             contributed: flagscope/feature-lists only accepts lists scanned by the contributor. \
+             Run `flagscope scan --rescan`, then try again. Nothing was written.",
+            path.display()
+        ),
+        Error::ContributionExists { path } => format!(
+            "Error: {} already exists. The list may already be in flagscope/feature-lists; \
+             to replace it, delete the file first. Nothing was written.",
+            path.display()
+        ),
         Error::NoMatchingBinary { names } => format!(
             "Error: no system binary matches {}. Use a file name such as explorer.exe, or a full \
              path under C:\\Windows. Nothing was scanned.",
@@ -222,6 +238,16 @@ pub fn error(error: &Error) -> String {
         ),
         other => format!("Error: {other}. No list was saved."),
     }
+}
+
+/// Shown after a contribution file was written.
+pub fn contribution_written(path: &Path) -> String {
+    format!(
+        "Contribution written to {}.\n\
+         Check it, then commit it with `git commit -s` and open a pull request to \
+         flagscope/feature-lists.",
+        path.display()
+    )
 }
 
 /// Shown after the list was written to a file.

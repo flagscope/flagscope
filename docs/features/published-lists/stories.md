@@ -16,7 +16,7 @@ Covers: RF-18.1, RF-18.2, RNF-01.2
 2. CA-06.2: That file starts with the `#` header lines of AD-16 (list title, build, architecture, generator with flagscope version and scan mode, scan date) and continues with the same `Name: ID` lines as the saved list, sorted by name.
 3. CA-06.3: When the local list of the installed build did not come from a scan on this machine, the contribution command writes nothing and prints why.
 
-**Status.** pending
+**Status.** verified
 
 ## HU-07: Get the list of my build without scanning
 

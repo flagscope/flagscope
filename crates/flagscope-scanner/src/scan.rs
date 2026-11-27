@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, PoisonError, mpsc};
 use std::time::{Duration, Instant};
 
-use flagscope_core::{Build, Feature, FeatureId};
+use flagscope_core::{Build, Feature, FeatureId, ListHeader};
 use flagscope_symbols::{PdbReference, SymbolServer};
 
 use crate::pdb_symbols::{self, PartialError, PartialPlan};
@@ -796,13 +796,40 @@ pub fn feature_list(
         });
     }
     let report = scan_installed_build(options, observer)?;
-    lists::save(&saved_at, &report.features)?;
+    let mode = match options.effective_mode() {
+        ScanMode::Light => "light",
+        ScanMode::Full => "full",
+    };
+    let header = ListHeader {
+        build: report.build,
+        // flagscope supports x64 only (RNF-01).
+        architecture: "x64".to_owned(),
+        generator: format!("flagscope {}, {mode} scan", env!("CARGO_PKG_VERSION")),
+        scanned: lists::today(),
+    };
+    lists::save(&saved_at, &header, &report.features)?;
     Ok(FeatureList {
         build: report.build,
         features: report.features.clone(),
         saved_at,
         source: ListSource::Scanned(Box::new(report)),
     })
+}
+
+/// Copies the saved list of the installed build into `directory` in the layout
+/// of `flagscope/feature-lists`, ready for a pull request (RF-18). Returns the
+/// path written.
+///
+/// # Errors
+///
+/// Returns [`Error::Build`] if the build cannot be detected,
+/// [`Error::NoSavedList`] if the build has no saved list,
+/// [`Error::NotScannedHere`] if the saved list did not come from a scan on
+/// this machine, [`Error::ContributionExists`] if the file is already there,
+/// and [`Error::Io`] if a file cannot be read or written.
+pub fn prepare_contribution(options: &ScanOptions, directory: &Path) -> Result<PathBuf, Error> {
+    let build = build::installed_build()?;
+    lists::prepare_contribution(&lists::path(&options.lists_directory, build), directory)
 }
 
 /// Splits names into single-ID features and conflicts (AD-14).

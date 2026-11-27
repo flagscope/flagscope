@@ -18,6 +18,65 @@ impl fmt::Display for Build {
     }
 }
 
+/// The `#` header of a feature list in `flagscope/feature-lists` (AD-16).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListHeader {
+    /// The build the list belongs to.
+    pub build: Build,
+    /// The architecture, for example `x64`.
+    pub architecture: String,
+    /// The tool, its version and scan mode, for example `flagscope 0.1.0, light scan`.
+    pub generator: String,
+    /// The scan date, `YYYY-MM-DD`.
+    pub scanned: String,
+}
+
+/// First line of a list header.
+const LIST_TITLE: &str = "# flagscope feature list";
+
+impl ListHeader {
+    /// The header as text lines, title first.
+    #[must_use]
+    pub fn lines(&self) -> [String; 5] {
+        [
+            LIST_TITLE.to_owned(),
+            format!("# Build: {}", self.build),
+            format!("# Architecture: {}", self.architecture),
+            format!("# Generator: {}", self.generator),
+            format!("# Scanned: {}", self.scanned),
+        ]
+    }
+
+    /// Reads the header from the start of a list, or `None` if the list has
+    /// no complete header.
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
+        let mut lines = text.lines();
+        if lines.next()?.trim_end() != LIST_TITLE {
+            return None;
+        }
+        let mut field = |name: &str| {
+            lines
+                .next()?
+                .strip_prefix("# ")?
+                .strip_prefix(name)?
+                .strip_prefix(": ")
+                .map(|value| value.trim_end().to_owned())
+        };
+        let build = field("Build")?;
+        let (major, revision) = build.split_once('.')?;
+        Some(Self {
+            build: Build {
+                major: major.parse().ok()?,
+                revision: revision.parse().ok()?,
+            },
+            architecture: field("Architecture")?,
+            generator: field("Generator")?,
+            scanned: field("Scanned")?,
+        })
+    }
+}
+
 /// Identifier of a feature in the Windows feature configuration store.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FeatureId(pub u32);
@@ -146,6 +205,27 @@ mod tests {
             let error = read_list(text.as_bytes()).unwrap_err();
             assert_eq!(error.kind(), io::ErrorKind::InvalidData, "{text}");
         }
+    }
+
+    #[test]
+    fn list_header_round_trips_and_rejects_incomplete_headers() {
+        let header = ListHeader {
+            build: Build {
+                major: 26_300,
+                revision: 10_075,
+            },
+            architecture: "x64".to_owned(),
+            generator: "flagscope 0.1.0, light scan".to_owned(),
+            scanned: "2026-11-26".to_owned(),
+        };
+        let text = header.lines().join("\n") + "\nAlpha: 1\n";
+        assert!(text.starts_with("# flagscope feature list\n# Build: 26300.10075\n"));
+        assert_eq!(ListHeader::parse(&text), Some(header));
+        assert_eq!(ListHeader::parse("Alpha: 1\n"), None);
+        assert_eq!(
+            ListHeader::parse("# flagscope feature list\n# Build: 26300\n"),
+            None
+        );
     }
 
     #[test]

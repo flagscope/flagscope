@@ -17,7 +17,7 @@ pub use build::installed_build;
 pub use progress::{Estimate, NoObserver, Progress, ScanObserver};
 pub use scan::{
     Conflict, FeatureList, ListSource, ScanMode, ScanOptions, ScanReport, ScanStats, feature_list,
-    scan_installed_build,
+    prepare_contribution, scan_installed_build,
 };
 
 use std::fs;
@@ -64,6 +64,24 @@ pub enum Error {
     Environment {
         /// The variable name.
         variable: &'static str,
+    },
+    /// The installed build has no saved list.
+    #[error("no list is saved at {path}")]
+    NoSavedList {
+        /// Where the list would be.
+        path: PathBuf,
+    },
+    /// The saved list did not come from a scan on this machine.
+    #[error("the list at {path} was not scanned on this machine")]
+    NotScannedHere {
+        /// The saved list.
+        path: PathBuf,
+    },
+    /// The contribution file already exists.
+    #[error("{path} already exists")]
+    ContributionExists {
+        /// The existing file.
+        path: PathBuf,
     },
     /// A targeted scan named binaries that are not system binaries.
     #[error("no system binary matches {}", names.join(", "))]

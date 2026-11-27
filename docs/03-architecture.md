@@ -71,3 +71,4 @@ Dependency direction: `flagscope-cli` → `flagscope-scanner` → `flagscope-sym
 | AD-19 | Read light-mode symbol files from memory, and download distinct symbol files in parallel | `features/lighter-scans/decisions.md` |
 | AD-20 | Store the result of each distinct symbol file under the user's local application data, as text | `features/lighter-scans/decisions.md` |
 | AD-21 | Check that the symbol server answers before reading the system binaries, and divide the duration estimate by the parallel downloads | `features/lighter-scans/decisions.md` |
+| AD-22 | Saved lists carry the AD-16 header and a local source mark; only lists scanned here can be contributed | `features/published-lists/decisions.md` |

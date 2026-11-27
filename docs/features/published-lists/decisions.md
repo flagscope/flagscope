@@ -15,3 +15,14 @@ Alternatives considered:
 Decision: the path of a list is `<architecture>/<major>/<major>.<revision>.txt`, for example `x64/26300/26300.10075.txt`. The file is UTF-8 text: a header of `#` comment lines (build, architecture, flagscope version, scan mode, scan date), then one `Name: ID` line per feature, sorted by name. The tool finds the exact list from the build alone; for the nearest build (RF-15) it lists the files in the `<architecture>/<major>/` folder. The data is licensed CC0-1.0. Chosen by the user among the alternatives offered.
 Consequences: no index file to maintain and no merge conflicts between contributions to different builds. Adding ARM64 later adds an `arm64/` folder without moving files. Reviewers read a list as plain lines in the pull request diff. The `#` header is the only addition to the mach2 line format, so readers of this format must skip comment lines.
 Status: active
+
+## AD-22: Saved lists carry the AD-16 header and a local source mark; only lists scanned here can be contributed
+
+Date: 2026-11-27
+Context: HU-06 must refuse to contribute a list that did not come from a scan on this machine (RF-18.2). Saved lists written before HU-06 were plain `Name: ID` lines with no record of where they came from, and published lists (HU-07) will also be saved locally.
+Alternatives considered:
+- A separate metadata file next to each saved list: keeps the list format untouched, but two files can get out of step.
+- Trust any saved list: simplest, but a downloaded list could be sent back to `flagscope/feature-lists` as if it were a new scan.
+Decision: a saved list starts with the AD-16 header (title, build, architecture, generator with flagscope version and scan mode, UTC scan date), then `# Source: scanned on this machine` when it came from a scan here, then the `Name: ID` lines. `flagscope contribute <folder>` copies the header and the lines to `<folder>/<architecture>/<major>/<build>.txt`, without the source line, and refuses lists without that line or without a header; it never overwrites an existing file. Readers of saved lists skip `#` lines, so loading is unchanged.
+Consequences: lists saved before HU-06 must be scanned again before they can be contributed (a rescan with stored results takes under a minute). Published lists saved by HU-07 will carry a different source line and stay non-contributable. The architecture is written as `x64`, the only one flagscope supports (RNF-01).
+Status: active
