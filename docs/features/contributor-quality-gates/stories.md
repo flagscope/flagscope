@@ -17,9 +17,9 @@ Covers: RNF-05.1, RNF-05.2
 1. CA-13.1: A pull request whose code is formatted and has no linter warning shows the formatting-and-lint check as passed.
 2. CA-13.2: A pull request with one formatting difference shows that check as failed, and its log names the file.
 3. CA-13.3: A pull request with one linter warning shows that check as failed, and its log names the warning.
-4. CA-13.4: The check log shows the library crates (`flagscope-core`, `flagscope-symbols`, `flagscope-scanner`) built and tested in a step of their own, without any user-interface crate.
+4. CA-13.4: The log of the "Tests" check shows the library crates (`flagscope-core`, `flagscope-symbols`, `flagscope-scanner`) built and tested in a step of their own, without any user-interface crate. (reworded on 2026-11-27 with the user's approval: the step runs in "Tests", AD-24)
 
-**Status.** in progress
+**Status.** verified
 
 ## HU-14: Tests by level run on every pull request
 
@@ -73,4 +73,4 @@ Covers: RNF-09.2
 1. CA-17.1: A direct `git push` to `main` is rejected by GitHub.
 2. CA-17.2: A pull request with a failing check cannot be merged from the GitHub page.
 
-**Status.** pending
+**Status.** verified
