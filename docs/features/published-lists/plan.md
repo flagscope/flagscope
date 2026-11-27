@@ -22,5 +22,5 @@
 - A newly merged list is visible through the GitHub API at once, but `raw.githubusercontent.com` answered 404 for a few minutes after PR #1 was merged (observed 2026-11-27). HU-07 must treat a missing list as "not published yet", not as an error.
 
 - HU-08 may stay blocked for weeks, until the next cumulative update.
-- Without automated checks in `flagscope/feature-lists`, reviewers check contributed lists by reading them. On 2026-11-27 the user decided to add an automated format check to that repository (path matches the header, AD-16 header, `Name: ID` lines, sorted, unique names); its requirements and stories are written next session.
+- Without automated checks in `flagscope/feature-lists`, reviewers check contributed lists by reading them. On 2026-11-27 the user decided to add an automated format check to that repository (path matches the header, AD-16 header, `Name: ID` lines, sorted, unique names). It was built and verified as the feature `list-format-check` (HU-18, HU-19), merged on 2026-11-27.
 - GitHub limits unauthenticated API requests to 60 per hour per IP address. Finding the nearest build lists a folder through that API, at most one request per run.
