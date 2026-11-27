@@ -47,7 +47,8 @@ pub(crate) fn save(
 ) -> io::Result<()> {
     fs::create_dir_all(directory)?;
     let target = path(directory, reference);
-    let temporary = target.with_extension("txt.partial");
+    // The process ID keeps two scans running at once from writing the same file.
+    let temporary = target.with_extension(format!("txt.{}.partial", std::process::id()));
     let written = (|| {
         let mut file = BufWriter::new(fs::File::create(&temporary)?);
         writeln!(file, "{TITLE}")?;

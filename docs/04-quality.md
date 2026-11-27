@@ -29,6 +29,9 @@
 | 2026-11-26 | Full scan keeping symbol files: duration and disk | 3,485 s; 2,413 downloads, 2,383 distinct files kept (6.2 GiB); the scan reported a peak of 7,952.3 MB because it counts the 30 repeated downloads of an identical PDB, which overwrite the same file | HU-05 verification, run 3 |
 | 2026-11-26 | Loading the saved list | 0 s, no symbol directory created | HU-05 verification, run 2 |
 | 2026-11-26 | Light vs full mode on a sample root (copies of `shell32.dll`, `twinui.dll`, `Windows.UI.Xaml.dll`, `explorer.exe`, plus a second copy of `shell32.dll`) | Light: 74.2 MB, 28 s, peak disk 0; full: 386.2 MB, 107 s, peak 354.8 MB; full keeping files: peak 386.2 MB, 4 files on disk; same 556 features in all three; 5 binaries read from 4 downloads | HU-09 development check, not a criterion |
+| 2026-11-26 | Light scan of build 26300.10075 (8 download threads) | 3,175.8 MB (43.4 MB of it reading file structures) from 2,383 distinct PDBs in 5 min 40 s; estimate said 3,132.4 MB in 36 min 57 s | verification batch, run A |
+| 2026-11-26 | Full scan keeping files, run at the same time as the light scan | 6,616.1 MB in 6 min 17 s; 2,383 files kept, 6,616,068,096 bytes on disk; estimate said 38 min 14 s | verification batch, run B |
+| 2026-11-26 | Second light scan with all results stored | 0 bytes downloaded, 47 s (reading 6,371 binaries to choose candidates) | verification batch, run F |
 
 ## Verification log
 
@@ -69,3 +72,25 @@
 | HU-11 | CA-11.1: a targeted scan of `explorer.exe` prints its features, says the list covers only it, downloads only its symbol file | pass | 2026-11-26 | `flagscope scan --binary explorer.exe` exited 0 after 3 s; printed `Targeted light scan of explorer.exe ... The list covers only these binaries and is not saved as the list of the build.`, 250 `Name: ID` lines, `1 binaries examined, 1 scanned`, `0 symbol files taken from earlier scans, 1 downloaded.`, and `Downloaded 2.2 MB`. No stored results existed beforehand. |
 | HU-11 | CA-11.2: after a targeted scan, the saved list of the build is unchanged | pass | 2026-11-26 | SHA-256 of `lists³00.10075.txt` identical before and after; the run printed `Targeted scan: the list covers only the named binaries and was not saved.` |
 | HU-11 | CA-11.3: a name that matches no binary is reported and the exit code is non-zero | pass | 2026-11-26 | `flagscope scan --binary nosuch.dll --binary explorer.exe` printed `Error: no system binary matches nosuch.dll. ... Nothing was scanned.` and exited 1. |
+| HU-02 | CA-02.1 | pass | 2026-11-26 | Run A printed `Windows build 26300.10075` and 7,402 `Name: ID` lines, exit 0; `winver` shows 26300.10075 (observed by the user). |
+| HU-02 | CA-02.3 | pass | 2026-11-26 | Runs A and B were started from a console at integrity level Medium (`Mandatory Label\Medium Mandatory Level`, not in the Administrators role) and exited 0. |
+| HU-03 | CA-03.1 | pass | 2026-11-26 | Run A wrote `A.txt`: 7,402 lines, all `Name: ID`. |
+| HU-03 | CA-03.2 | pass | 2026-11-26 | The 7,402 entry lines run A printed are byte-identical to `A.txt`. |
+| HU-03 | CA-03.3 | pass | 2026-11-26 | Run E without `--overwrite` on an existing file: `Error: ... already exists ...`, `Nothing was scanned or written.`, exit 1. Run E with `--overwrite`: the file holding `stale` now equals the saved list. |
+| HU-04 | CA-04.1 (reworded) | pass | 2026-11-26 | Run A printed `Read the structure of the symbol files (43.4 MB). About to download 2383 symbol files, 3132.4 MB in total. Estimated time: 36 min 57 s ...` before the first progress line; run B printed its estimate (6,616.1 MB) before downloading. |
+| HU-04 | CA-04.2 | pass | 2026-11-26 | Run A printed 7 progress lines, the percentage and remaining time changing: `0.0% ... 51 min 19 s left`, `17.5% ... 4 min 48 s left`, `36.7% ... 3 min 28 s left`, `100.0% ... 0 s left`. |
+| HU-04 | CA-04.3 | pass | 2026-11-26 | Run A: `Downloaded 3175.8 MB in 5 min 40 s (estimated: 3132.4 MB in 36 min 57 s).`; run B: `Downloaded 6616.1 MB in 6 min 17 s (estimated: 6616.1 MB in 38 min 14 s).` Known defect: the duration estimate ignores that downloads run in parallel, so it is about six times too long. |
+| HU-05 | CA-05.1 | pass | 2026-11-26 | Run E with a saved list took 0 s and printed `from the saved list ...` and `Nothing was downloaded.` |
+| HU-05 | CA-05.2 | pass | 2026-11-26 | Run A used `--rescan` with a list already saved, downloaded 2,383 symbol files, and saved the list again (the last scan, run F, rewrote it at 19:42:03; content unchanged because the build is the same). |
+| HU-05 | CA-05.3 | pass | 2026-11-26 | Run A (default options, light mode) printed `nothing was written to disk` and `Peak disk space used by symbol files: 0.0 MB`; the only symbol folder afterwards was run B's `scan-26908`. |
+| HU-05 | CA-05.4 | pass | 2026-11-26 | Run B kept 2,383 files in 2,383 distinct PDB folders, one for each symbol file it reported as downloaded. |
+| HU-05 | CA-05.5 | pass | 2026-11-26 | Runs A and B printed `Peak disk space used by symbol files:` (0.0 MB and 6,616.1 MB). |
+| HU-09 | CA-09.1 | pass | 2026-11-26 | Light run A reported 3,175.8 MB; full run B reported 6,616.1 MB for the same build. |
+| HU-09 | CA-09.2 | pass | 2026-11-26 | The 7,402 entry lines of run A (light) and run B (full) are byte-identical. |
+| HU-09 | CA-09.3 | pass | 2026-11-26 | Run A reported 2,383 symbol files downloaded for 2,413 binaries scanned; run B kept 2,383 distinct PDB folders for the same binaries, so each distinct symbol file was downloaded once. |
+| HU-09 | CA-09.4 | pass | 2026-11-26 | Run B reported a peak of 6,616.1 MB; the files left on disk total 6,616,068,096 bytes. |
+| HU-10 | CA-10.1 | pass | 2026-11-26 | After removing the three stored results, `flagscope scan --full --binary shell32.dll --binary twinui.dll --binary explorer.exe` downloaded 3 files (31.3 MB) and printed `all 3 have the size the server reported.` (A first run in the batch reused the stored results and downloaded nothing, so it did not count.) |
+| HU-10 | CA-10.2 | pass | 2026-11-26 | Run B (`--keep-symbol-files`, no mode option) printed `Full scan: keeping symbol files needs complete files, so they are downloaded whole.` and `all 2383 have the size the server reported.` |
+| HU-12 | CA-12.1 | pass | 2026-11-26 | Run F (`--rescan` after runs A and B) printed `2383 symbol files taken from earlier scans, 0 downloaded.`, downloaded 0.0 MB, and its 7,402 entry lines are byte-identical to run A's. |
+| HU-12 | CA-12.2 | pass | 2026-11-26 | Runs A, B, D, and F printed `<n> symbol files taken from earlier scans, <m> downloaded.` |
+| HU-02 | CA-02.4 (re-observed after HU-03 to HU-12) | pass | 2026-11-26 | Observed by the user, with the network disconnected, from a terminal in which `%LOCALAPPDATA%lagscope` was not visible (so no saved list and no stored results): `flagscope scan --rescan` printed `Error: no network connection. Cannot reach Microsoft's symbol server (...)` and `No list was saved.`, exit code 1, and no `lists` folder existed afterwards. Twice, with the same result. The user noted that detecting the missing connection takes a moment. |

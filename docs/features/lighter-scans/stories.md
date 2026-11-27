@@ -17,7 +17,7 @@ Covers: RF-16.1, RF-16.2, RNF-08.2
 3. CA-09.3: The number of symbol files it reports as downloaded equals the number of distinct symbol files among the binaries it scanned.
 4. CA-09.4: With symbol files kept, the peak disk space the scan reports equals the total size of the files left on disk.
 
-**Status.** in progress
+**Status.** verified
 
 ## HU-10: Keep complete symbol files
 
@@ -30,7 +30,7 @@ Covers: RF-16.3
 1. CA-10.1: With the full-mode option, every symbol file the scan downloads has the size the server reports for it.
 2. CA-10.2: With the keep option and no mode option, the scan states that it uses full mode, and every kept file has the size the server reports for it.
 
-**Status.** in progress
+**Status.** verified
 
 ## HU-11: Scan only the binaries I name
 
@@ -57,4 +57,4 @@ Covers: RF-17.1
 1. CA-12.1: A second scan of the same build with the rescan option downloads no symbol file, and produces a list identical to the first.
 2. CA-12.2: A scan reports how many symbol files it took from earlier scans and how many it downloaded.
 
-**Status.** in progress
+**Status.** verified
