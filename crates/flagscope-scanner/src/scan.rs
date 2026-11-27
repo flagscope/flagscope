@@ -13,7 +13,9 @@ use flagscope_symbols::{PdbReference, SymbolServer};
 
 use crate::pdb_symbols::{self, PartialError, PartialPlan};
 use crate::progress::{Estimate, Progress, ScanObserver, expected_duration};
-use crate::{Error, Extraction, build, candidates, extract_features, lists, read_descriptors};
+use crate::{
+    Error, Extraction, build, candidates, extract_features, lists, read_descriptors, results,
+};
 
 /// Concurrent requests while planning a scan (AD-18, AD-19).
 const PLANNING_WORKERS: usize = 16;
@@ -42,11 +44,16 @@ pub struct ScanOptions {
     pub symbol_directory: PathBuf,
     /// How symbol files are downloaded.
     pub mode: ScanMode,
+    /// File names or full paths of the only binaries to scan (targeted mode,
+    /// RF-16.4). Empty scans the whole build.
+    pub binaries: Vec<String>,
     /// Keep downloaded symbol files instead of deleting each one once its
     /// features have been extracted (RF-12). Selects full mode.
     pub keep_symbol_files: bool,
     /// Directory of saved lists, one `<build>.txt` per build (AD-09).
     pub lists_directory: PathBuf,
+    /// Directory of stored results, one file per distinct symbol file (AD-20).
+    pub results_directory: PathBuf,
     /// The symbol server to download from.
     pub server: SymbolServer,
 }
@@ -71,8 +78,10 @@ impl ScanOptions {
             system_root: variable("SystemRoot")?,
             symbol_directory: data.join("symbols"),
             mode: ScanMode::Light,
+            binaries: Vec::new(),
             keep_symbol_files: false,
             lists_directory: data.join("lists"),
+            results_directory: data.join("results"),
             server: SymbolServer::microsoft(),
         })
     }
@@ -115,12 +124,18 @@ pub struct ScanStats {
     pub unreadable_descriptors: usize,
     /// Symbol files downloaded.
     pub symbol_files_downloaded: usize,
+    /// Symbol files not downloaded because an earlier scan stored their
+    /// result (RF-17.1).
+    pub symbol_files_reused: usize,
     /// Total bytes of symbol files downloaded.
     pub downloaded_bytes: u64,
     /// Largest amount of disk space the scan's symbol files took at one time.
     pub peak_disk_bytes: u64,
     /// Time from the first download to the end of the scan.
     pub download_duration: Duration,
+    /// Complete symbol files (full mode) whose size differs from the size the
+    /// server reported before the download (RF-16.3).
+    pub incomplete_files: usize,
 }
 
 /// The result of scanning a build.
@@ -167,7 +182,20 @@ pub fn scan_installed_build(
         .symbol_directory
         .join(format!("scan-{}", std::process::id()));
 
-    let targets = choose_targets(&options.system_root, &mut stats);
+    let mut found: BTreeMap<String, BTreeMap<FeatureId, Vec<PathBuf>>> = BTreeMap::new();
+    let mut targets = choose_targets(&options.system_root, &options.binaries, &mut stats)?;
+    // Kept symbol files must be downloaded, so stored results are only used otherwise.
+    if !options.keep_symbol_files {
+        targets.retain(|target| {
+            let Some(extraction) = results::load(&options.results_directory, &target.reference)
+            else {
+                return true;
+            };
+            stats.symbol_files_reused += 1;
+            record(&mut found, &mut stats, extraction, &target.binaries);
+            false
+        });
+    }
     let planning = plan_targets(&options.server, &targets, mode)?;
     stats.downloaded_bytes += planning.bytes;
     let mut work = Vec::new();
@@ -195,7 +223,6 @@ pub fn scan_installed_build(
     let files_total = work.len();
     let disk = DiskUse::default();
     let stop = AtomicBool::new(false);
-    let mut found: BTreeMap<String, BTreeMap<FeatureId, Vec<PathBuf>>> = BTreeMap::new();
     // Directories this scan wrote, so that a failed scan removes only its own files.
     let mut created: Vec<PathBuf> = Vec::new();
     let mut failure: Option<Error> = None;
@@ -218,22 +245,22 @@ pub fn scan_installed_build(
                     stats.symbol_files_downloaded += 1;
                     bytes_done += processed.bytes;
                     created.extend(processed.directory);
-                    let binaries = &targets[index].binaries;
+                    if processed.complete == Some(false) {
+                        stats.incomplete_files += 1;
+                    }
+                    let target = &targets[index];
                     match processed.extraction {
                         Ok(extraction) => {
-                            stats.binaries_scanned += binaries.len();
-                            stats.unreadable_descriptors += extraction.unreadable.len();
-                            for feature in extraction.features {
-                                found
-                                    .entry(feature.name)
-                                    .or_default()
-                                    .entry(feature.id)
-                                    .or_default()
-                                    .extend(binaries.iter().cloned());
-                            }
+                            // A result that cannot be stored is read again next time; the scan goes on.
+                            let _ = results::save(
+                                &options.results_directory,
+                                &target.reference,
+                                &extraction,
+                            );
+                            record(&mut found, &mut stats, extraction, &target.binaries);
                         }
                         Err(Error::Pdb { .. } | Error::Binary { .. }) => {
-                            stats.unreadable_pdbs += binaries.len();
+                            stats.unreadable_pdbs += target.binaries.len();
                         }
                         Err(error) => {
                             failure.get_or_insert(error);
@@ -276,6 +303,26 @@ pub fn scan_installed_build(
     })
 }
 
+/// Adds the features read from one symbol file, for every binary that
+/// references it.
+fn record(
+    found: &mut BTreeMap<String, BTreeMap<FeatureId, Vec<PathBuf>>>,
+    stats: &mut ScanStats,
+    extraction: Extraction,
+    binaries: &[PathBuf],
+) {
+    stats.binaries_scanned += binaries.len();
+    stats.unreadable_descriptors += extraction.unreadable.len();
+    for feature in extraction.features {
+        found
+            .entry(feature.name)
+            .or_default()
+            .entry(feature.id)
+            .or_default()
+            .extend(binaries.iter().cloned());
+    }
+}
+
 /// One distinct symbol file and the binaries that reference it (RF-16.2).
 struct Target {
     reference: PdbReference,
@@ -284,12 +331,33 @@ struct Target {
 
 /// Chooses the binaries to scan and groups them by the symbol file they
 /// reference, keeping the order in which each symbol file is first seen.
-fn choose_targets(system_root: &Path, stats: &mut ScanStats) -> Vec<Target> {
+///
+/// With `names`, only the system binaries whose file name or full path equals
+/// one of them (ignoring case) are chosen, whether or not they reference the
+/// feature-staging API (RF-16.4).
+fn choose_targets(
+    system_root: &Path,
+    names: &[String],
+    stats: &mut ScanStats,
+) -> Result<Vec<Target>, Error> {
     let mut targets: Vec<Target> = Vec::new();
     let mut by_identity: HashMap<String, usize> = HashMap::new();
+    let mut matched = vec![false; names.len()];
     for binary in candidates::system_binaries(system_root) {
+        if !names.is_empty() {
+            let mut any = false;
+            for (name, hit) in names.iter().zip(matched.iter_mut()) {
+                if names_binary(name, &binary) {
+                    *hit = true;
+                    any = true;
+                }
+            }
+            if !any {
+                continue;
+            }
+        }
         stats.binaries_examined += 1;
-        let Some(reference) = candidate_reference(&binary) else {
+        let Some(reference) = candidate_reference(&binary, names.is_empty()) else {
             continue;
         };
         match by_identity.get(&reference.server_path()) {
@@ -303,7 +371,28 @@ fn choose_targets(system_root: &Path, stats: &mut ScanStats) -> Vec<Target> {
             }
         }
     }
-    targets
+    let unmatched: Vec<String> = names
+        .iter()
+        .zip(&matched)
+        .filter(|(_, hit)| !**hit)
+        .map(|(name, _)| name.clone())
+        .collect();
+    if !unmatched.is_empty() {
+        return Err(Error::NoMatchingBinary { names: unmatched });
+    }
+    Ok(targets)
+}
+
+/// Whether `name` is the file name or the full path of `binary`, ignoring case
+/// and the kind of slash.
+fn names_binary(name: &str, binary: &Path) -> bool {
+    let name = name.replace('/', "\\");
+    let file_name = binary.file_name().and_then(|file| file.to_str());
+    file_name.is_some_and(|file| file.eq_ignore_ascii_case(&name))
+        || binary
+            .to_string_lossy()
+            .replace('/', "\\")
+            .eq_ignore_ascii_case(&name)
 }
 
 /// What planning found out about one symbol file.
@@ -449,6 +538,8 @@ struct Processed {
     bytes: u64,
     /// Directory written for it, in full mode.
     directory: Option<PathBuf>,
+    /// In full mode, whether the file has the size the server reported.
+    complete: Option<bool>,
 }
 
 /// Downloads and reads one symbol file. An error is returned only for
@@ -467,6 +558,7 @@ fn process_target(
             extraction: Ok(Extraction::default()),
             bytes: 0,
             directory: None,
+            complete: None,
         }),
         Plan::Partial(plan) => {
             let planned = plan.planned_bytes();
@@ -484,6 +576,7 @@ fn process_target(
                         }),
                         bytes: 0,
                         directory: None,
+                        complete: None,
                     });
                 }
             };
@@ -494,9 +587,10 @@ fn process_target(
                 extraction,
                 bytes,
                 directory: None,
+                complete: None,
             })
         }
-        Plan::Whole(_) => {
+        Plan::Whole(expected) => {
             let directory = run_directory.join(target.reference.server_path().replace('/', "_"));
             let pdb = options
                 .server
@@ -512,6 +606,7 @@ fn process_target(
                 extraction,
                 bytes: pdb.size,
                 directory: Some(directory),
+                complete: Some(pdb.size == expected),
             })
         }
     }
@@ -602,9 +697,14 @@ fn download_error(error: flagscope_symbols::Error) -> Error {
 }
 
 /// Returns the PDB reference of `binary` if the scan should download its PDB.
-fn candidate_reference(binary: &Path) -> Option<flagscope_symbols::PdbReference> {
+/// With `require_marker`, only binaries that reference the feature-staging
+/// API qualify (AD-13).
+fn candidate_reference(
+    binary: &Path,
+    require_marker: bool,
+) -> Option<flagscope_symbols::PdbReference> {
     let contents = fs::read(binary).ok()?;
-    if !candidates::references_feature_staging(&contents) {
+    if require_marker && !candidates::references_feature_staging(&contents) {
         return None;
     }
     flagscope_symbols::pdb_reference_of_x64(&contents)
@@ -635,6 +735,9 @@ pub enum ListSource {
     Saved,
     /// Produced by a scan now, and saved for later runs.
     Scanned(Box<ScanReport>),
+    /// Produced by a targeted scan of some binaries only; not saved
+    /// (RF-16.4).
+    Targeted(Box<ScanReport>),
 }
 
 /// A feature list for the installed build.
@@ -652,7 +755,8 @@ pub struct FeatureList {
 
 /// Returns the feature list of the installed build: the saved one when it
 /// exists and `rescan` is false (RF-07.1), otherwise a new scan, which is then
-/// saved (RF-07.2).
+/// saved (RF-07.2). A targeted scan ([`ScanOptions::binaries`]) always scans
+/// and never saves (RF-16.4).
 ///
 /// # Errors
 ///
@@ -665,6 +769,15 @@ pub fn feature_list(
 ) -> Result<FeatureList, Error> {
     let build = build::installed_build()?;
     let saved_at = lists::path(&options.lists_directory, build);
+    if !options.binaries.is_empty() {
+        let report = scan_installed_build(options, observer)?;
+        return Ok(FeatureList {
+            build: report.build,
+            features: report.features.clone(),
+            saved_at,
+            source: ListSource::Targeted(Box::new(report)),
+        });
+    }
     if !rescan && let Some(features) = lists::load(&saved_at)? {
         return Ok(FeatureList {
             build,
@@ -713,6 +826,16 @@ mod tests {
                 .push(PathBuf::from(binary));
         }
         map
+    }
+
+    #[test]
+    fn binaries_are_named_by_file_name_or_full_path_ignoring_case() {
+        let binary = Path::new(r"C:\Windows\explorer.exe");
+        assert!(names_binary("EXPLORER.EXE", binary));
+        assert!(names_binary(r"c:\windows\explorer.exe", binary));
+        assert!(names_binary("C:/Windows/explorer.exe", binary));
+        assert!(!names_binary("explorer", binary));
+        assert!(!names_binary(r"C:\Windows\System32\explorer.exe", binary));
     }
 
     #[test]

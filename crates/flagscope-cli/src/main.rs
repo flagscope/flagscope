@@ -10,7 +10,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use flagscope_core::Feature;
-use flagscope_scanner::{ListSource, ScanOptions};
+use flagscope_scanner::{ListSource, ScanMode, ScanOptions};
 
 /// Command-line arguments.
 #[derive(Debug, Parser)]
@@ -42,9 +42,17 @@ enum Command {
         /// Scan the build even if a list is saved for it, and save the new list.
         #[arg(long)]
         rescan: bool,
-        /// Keep the downloaded symbol files instead of deleting them. Implies --rescan.
+        /// Keep the downloaded symbol files instead of deleting them. Implies --rescan
+        /// and --full.
         #[arg(long)]
         keep_symbol_files: bool,
+        /// Download complete symbol files instead of only the parts the scan reads.
+        #[arg(long)]
+        full: bool,
+        /// Scan only this system binary, given by file name (explorer.exe) or full path.
+        /// Repeat to name several. The list is not saved as the list of the build.
+        #[arg(long = "binary", value_name = "NAME")]
+        binaries: Vec<String>,
     },
 }
 
@@ -73,7 +81,16 @@ fn main() -> ExitCode {
             overwrite,
             rescan,
             keep_symbol_files,
-        } => scan(output.as_deref(), overwrite, rescan, keep_symbol_files),
+            full,
+            binaries,
+        } => scan(
+            output.as_deref(),
+            overwrite,
+            rescan,
+            keep_symbol_files,
+            full,
+            binaries,
+        ),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -91,6 +108,8 @@ fn scan(
     overwrite: bool,
     rescan: bool,
     keep_symbol_files: bool,
+    full: bool,
+    binaries: Vec<String>,
 ) -> Result<(), CliError> {
     // Checked before scanning so that a scan of almost an hour is not lost at the end.
     if let Some(path) = output
@@ -102,10 +121,23 @@ fn scan(
 
     let mut options = ScanOptions::for_this_machine()?;
     options.keep_symbol_files = keep_symbol_files;
+    if full {
+        options.mode = ScanMode::Full;
+    }
+    options.binaries = binaries;
     // Keeping symbol files only makes sense for a scan that downloads them.
     let rescan = rescan || keep_symbol_files;
     let build = flagscope_scanner::installed_build()?;
-    eprintln!("{}", messages::starting(build, rescan));
+    eprintln!(
+        "{}",
+        messages::starting(
+            build,
+            rescan,
+            options.effective_mode(),
+            keep_symbol_files,
+            &options.binaries
+        )
+    );
     let mut progress = console::ConsoleProgress::new();
     let list = flagscope_scanner::feature_list(&options, rescan, &mut progress);
     progress.finish();
@@ -120,10 +152,14 @@ fn scan(
     }
     match &list.source {
         ListSource::Saved => eprintln!("{}", messages::loaded(&list)),
-        ListSource::Scanned(report) => {
+        ListSource::Scanned(report) | ListSource::Targeted(report) => {
             let kept = keep_symbol_files.then_some(report.symbol_directory.as_path());
             let mode = options.effective_mode();
-            eprintln!("{}", messages::summary(report, &list.saved_at, mode, kept));
+            let saved_at = matches!(list.source, ListSource::Scanned(_)).then_some(&list.saved_at);
+            eprintln!(
+                "{}",
+                messages::summary(report, saved_at.map(PathBuf::as_path), mode, kept)
+            );
             eprintln!("{}", messages::actual(report, progress.estimate.as_ref()));
         }
     }

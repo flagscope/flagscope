@@ -86,9 +86,37 @@ pub fn actual(report: &ScanReport, estimate: Option<&Estimate>) -> String {
 }
 
 /// Shown before the list is loaded or scanned.
-pub fn starting(build: Build, rescan: bool) -> String {
+pub fn starting(
+    build: Build,
+    rescan: bool,
+    mode: ScanMode,
+    keep: bool,
+    binaries: &[String],
+) -> String {
+    if !binaries.is_empty() {
+        let mode = match mode {
+            ScanMode::Light => "light",
+            ScanMode::Full => "full",
+        };
+        return format!(
+            "Targeted {mode} scan of {names} in Windows build {build}. The list covers only these \
+             binaries and is not saved as the list of the build.",
+            names = binaries.join(", "),
+        );
+    }
     if rescan {
-        format!("Scanning Windows build {build}. This downloads symbol files and can take a while.")
+        let mode = match (mode, keep) {
+            (ScanMode::Light, _) => {
+                "Light scan: only the needed parts of the symbol files are downloaded."
+            }
+            (ScanMode::Full, true) => {
+                "Full scan: keeping symbol files needs complete files, so they are downloaded whole."
+            }
+            (ScanMode::Full, false) => "Full scan: complete symbol files are downloaded.",
+        };
+        format!(
+            "Scanning Windows build {build}. This downloads symbol files and can take a while.\n{mode}"
+        )
     } else {
         format!(
             "Getting the feature list of Windows build {build}. If no list is saved, this scans \
@@ -116,7 +144,7 @@ pub fn loaded(list: &FeatureList) -> String {
 /// Summary printed after a scan.
 pub fn summary(
     report: &ScanReport,
-    saved_at: &Path,
+    saved_at: Option<&Path>,
     mode: ScanMode,
     symbol_directory: Option<&Path>,
 ) -> String {
@@ -129,42 +157,65 @@ pub fn summary(
             size = megabytes(stats.downloaded_bytes),
         ),
         (ScanMode::Full, Some(directory)) => format!(
-            "{count} symbol files downloaded ({size:.1} MB) and kept in {path}.",
+            "{count} symbol files downloaded ({size:.1} MB) and kept in {path}; {complete}",
             count = stats.symbol_files_downloaded,
             size = megabytes(stats.downloaded_bytes),
             path = directory.display(),
+            complete = completeness(stats.symbol_files_downloaded, stats.incomplete_files),
         ),
         (ScanMode::Full, None) => format!(
-            "{count} symbol files downloaded ({size:.1} MB); all of them were deleted.",
+            "{count} symbol files downloaded ({size:.1} MB) and deleted after use; {complete}",
             count = stats.symbol_files_downloaded,
             size = megabytes(stats.downloaded_bytes),
+            complete = completeness(stats.symbol_files_downloaded, stats.incomplete_files),
         ),
     };
     format!(
         "{features} features in build {build}.\n\
          {examined} binaries examined, {scanned} scanned, {missing} without a public symbol file, \
          {unreadable} with an unreadable symbol file.\n\
+         {reused} symbol files taken from earlier scans, {downloaded} downloaded.\n\
          {conflicts} names with conflicting IDs (left out of the list), \
          {descriptors} names without a readable descriptor.\n\
          {files}\n\
          Peak disk space used by symbol files: {peak:.1} MB.\n\
-         List saved to {saved}.",
+         {saved}",
         features = report.features.len(),
         build = report.build,
         examined = stats.binaries_examined,
         scanned = stats.binaries_scanned,
         missing = stats.without_public_pdb,
         unreadable = stats.unreadable_pdbs,
+        reused = stats.symbol_files_reused,
+        downloaded = stats.symbol_files_downloaded,
         conflicts = report.conflicts.len(),
         descriptors = stats.unreadable_descriptors,
         peak = megabytes(stats.peak_disk_bytes),
-        saved = saved_at.display(),
+        saved = match saved_at {
+            Some(path) => format!("List saved to {}.", path.display()),
+            None => "Targeted scan: the list covers only the named binaries and was not saved."
+                .to_owned(),
+        },
     )
+}
+
+/// Whether full-mode downloads have the size the server reported (RF-16.3).
+fn completeness(files: usize, incomplete: usize) -> String {
+    if incomplete == 0 {
+        format!("all {files} have the size the server reported.")
+    } else {
+        format!("{incomplete} of {files} do NOT have the size the server reported.")
+    }
 }
 
 /// Shown when a command fails.
 pub fn error(error: &Error) -> String {
     match error {
+        Error::NoMatchingBinary { names } => format!(
+            "Error: no system binary matches {}. Use a file name such as explorer.exe, or a full \
+             path under C:\\Windows. Nothing was scanned.",
+            names.join(", ")
+        ),
         Error::NoConnection { url } => format!(
             "Error: no network connection. Cannot reach Microsoft's symbol server ({url}).\n\
              Check the network connection and run the scan again. No list was saved."

@@ -10,6 +10,7 @@ mod descriptor;
 mod lists;
 mod pdb_symbols;
 mod progress;
+mod results;
 mod scan;
 
 pub use build::installed_build;
@@ -63,6 +64,12 @@ pub enum Error {
     Environment {
         /// The variable name.
         variable: &'static str,
+    },
+    /// A targeted scan named binaries that are not system binaries.
+    #[error("no system binary matches {}", names.join(", "))]
+    NoMatchingBinary {
+        /// The names that matched nothing.
+        names: Vec<String>,
     },
     /// The symbol server could not be reached.
     #[error("cannot reach the symbol server ({url})")]

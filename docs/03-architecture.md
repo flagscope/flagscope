@@ -69,3 +69,4 @@ Dependency direction: `flagscope-cli` → `flagscope-scanner` → `flagscope-sym
 | AD-17 | `flagscope scan` uses the saved list by default; `--keep-symbol-files` implies a new scan | `features/find-feature-ids/decisions.md` |
 | AD-18 | Estimate a scan by asking the server for every size in parallel and timing one partial download | `features/find-feature-ids/decisions.md` |
 | AD-19 | Read light-mode symbol files from memory, and download distinct symbol files in parallel | `features/lighter-scans/decisions.md` |
+| AD-20 | Store the result of each distinct symbol file under the user's local application data, as text | `features/lighter-scans/decisions.md` |

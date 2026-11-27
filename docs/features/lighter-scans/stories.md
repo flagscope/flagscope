@@ -30,7 +30,7 @@ Covers: RF-16.3
 1. CA-10.1: With the full-mode option, every symbol file the scan downloads has the size the server reports for it.
 2. CA-10.2: With the keep option and no mode option, the scan states that it uses full mode, and every kept file has the size the server reports for it.
 
-**Status.** pending
+**Status.** in progress
 
 ## HU-11: Scan only the binaries I name
 
@@ -44,7 +44,7 @@ Covers: RF-16.4
 2. CA-11.2: After a targeted scan, the saved list of the build is unchanged.
 3. CA-11.3: A targeted scan of a name that matches no binary prints which name matched nothing and exits with a non-zero exit code.
 
-**Status.** pending
+**Status.** verified
 
 ## HU-12: Reuse what earlier scans read
 
@@ -57,4 +57,4 @@ Covers: RF-17.1
 1. CA-12.1: A second scan of the same build with the rescan option downloads no symbol file, and produces a list identical to the first.
 2. CA-12.2: A scan reports how many symbol files it took from earlier scans and how many it downloaded.
 
-**Status.** pending
+**Status.** in progress
