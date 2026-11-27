@@ -23,4 +23,4 @@
 - GitHub-hosted Windows runners run Windows Server, not Windows 11. The current tests need no Windows 11 feature, but a future test that does would have to be marked to run only on a real Windows 11 machine.
 - The tools used in the jobs (Rust toolchain installer, secret scanner) must meet AD-11's licence rule, and are pinned to fixed versions so that a release upstream cannot change a check silently.
 - Branch protection on a repository owned by an organization on the free plan is available for public repositories; `flagscope/flagscope` is public.
-- An automated format check for `flagscope/feature-lists` (path matches the header, `Name: ID` lines, sorted, unique) is not part of this feature; it remains an open question for the user.
+- An automated format check for `flagscope/feature-lists` (path matches the header, `Name: ID` lines, sorted, unique) is not part of this feature; on 2026-11-27 the user moved it into scope as the feature `list-format-check`.

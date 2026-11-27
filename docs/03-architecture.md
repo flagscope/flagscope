@@ -1,5 +1,5 @@
 > Status: approved
-> Last updated: 2026-11-26
+> Last updated: 2026-11-27
 > Mode: new-project
 
 # Architecture
@@ -74,3 +74,5 @@ Dependency direction: `flagscope-cli` → `flagscope-scanner` → `flagscope-sym
 | AD-22 | Saved lists carry the AD-16 header and a local source mark; only lists scanned here can be contributed | `features/published-lists/decisions.md` |
 | AD-23 | Download published lists from the raw-file URL of `main`, validate them, and save them as non-contributable local lists | `features/published-lists/decisions.md` |
 | AD-24 | Check pull requests with one GitHub Actions workflow of four jobs, with every tool pinned | `features/contributor-quality-gates/decisions.md` |
+| AD-25 | Check lists with a Python standard-library script in a GitHub Actions workflow of `flagscope/feature-lists` | `features/list-format-check/decisions.md` |
+| AD-26 | A list is every added or modified file in a top-level folder that does not start with a dot | `features/list-format-check/decisions.md` |

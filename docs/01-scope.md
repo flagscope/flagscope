@@ -1,5 +1,5 @@
 > Status: approved
-> Last updated: 2026-11-26
+> Last updated: 2026-11-27
 > Mode: new-project
 
 # Scope
@@ -18,6 +18,7 @@
 - Automated unit, integration, and end-to-end tests. (added 2026-11-26, stated by the user)
 - Published feature lists: by default, the tool downloads the list of the installed build from the public data repository `flagscope/feature-lists` instead of scanning. When no list exists for the exact build, it offers the list of the nearest build with a warning. (added 2026-11-26, stated by the user)
 - Contributing lists: anyone who scans a build can submit its list to `flagscope/feature-lists` through a pull request; the tool writes the file in that repository's format, and the person submits it. (added 2026-11-26, stated by the user)
+- Automated format check of contributed lists: every pull request to `flagscope/feature-lists` that adds or changes a list is checked automatically for the AD-16 format before a human reviews it. (added 2026-11-27, stated by the user)
 - Three scan modes when a scan is needed (added 2026-11-26, stated by the user):
   - Light (default): downloads only the parts of each symbol file the scanner reads, each identical symbol file once, and after a cumulative update only the symbol files that changed.
   - Full: downloads complete symbol files; required to keep them for other tools.
@@ -27,15 +28,16 @@
 
 ## Delivery order
 
-The scope is delivered as seven features, in this order. Only the first has full documents so far.
+The scope is delivered as eight features, in this order. Only the first has full documents so far.
 
 1. `find-feature-ids`: the installed build's feature list (first version). See `docs/features/find-feature-ids/`.
 2. `lighter-scans`: light and targeted scan modes, and reuse of unchanged symbol-file results across scans. (added 2026-11-26; moved before `published-lists` on 2026-11-26, because it changes the scan pipeline again and the full-scan verification of `find-feature-ids` is done once, after it)
 3. `published-lists`: download the list of the installed build (or the nearest build) from `flagscope/feature-lists`, and prepare lists for contribution. (added 2026-11-26)
 4. `contributor-quality-gates`: continuous integration for formatting, linting, tests by level, DCO sign-off, and secret scanning.
-5. `inspect-features`: read feature states, import mach2 lists, and fuzzy search.
-6. `toggle-features-safely`: change feature states with snapshots, elevation, and revert.
-7. `desktop-app`: GPUI user interface.
+5. `list-format-check`: the automated format check of pull requests to `flagscope/feature-lists`. (added 2026-11-27)
+6. `inspect-features`: read feature states, import mach2 lists, and fuzzy search.
+7. `toggle-features-safely`: change feature states with snapshots, elevation, and revert.
+8. `desktop-app`: GPUI user interface.
 
 ## Out of scope
 
@@ -74,4 +76,5 @@ The first version is done when it **finds the IDs**: it produces the `Name: ID` 
 - `README.md` is still a placeholder. Before the first release it must describe the project and the build prerequisites, including the Visual Studio C++ build tools (AD-11). (assistant)
 - Review rule with a single maintainer: resolved on 2026-11-27, self-review until there are two maintainers (`CONTRIBUTING.md`, "Review and merging").
 - DCO and merge commits: resolved on 2026-11-27, merge commits created by GitHub are exempt from the sign-off (`CONTRIBUTING.md`, "License and sign-off").
+- Automated format check for `flagscope/feature-lists` pull requests: moved into scope on 2026-11-27 (RF-19, feature `list-format-check`). Whether the check must pass before a list can be merged is still open. (assistant)
 - Code conventions: resolved in `docs/03-architecture.md` ("Conventions") on 2026-11-26.

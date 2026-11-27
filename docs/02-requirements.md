@@ -1,5 +1,5 @@
 > Status: approved
-> Last updated: 2026-11-26
+> Last updated: 2026-11-27
 > Mode: new-project
 
 # Requirements
@@ -90,6 +90,17 @@ Source: user statement, accepted proposal: after a cumulative update only the ch
 
 The system must write a scanned list in the format and file location that `flagscope/feature-lists` expects, so that the person who scanned can submit it through a pull request.
 Source: user statement, contributing lists through pull requests.
+
+### RF-19: Check contributed lists
+
+Every pull request to `flagscope/feature-lists` that adds or changes a list must be checked automatically, and the check must fail, naming the file and, where there is one, the line, when:
+- the path is not `<architecture>/<major>/<major>.<revision>.txt` for the build and architecture written in the file's header;
+- the header lacks a line that AD-16 requires (build, architecture, generator with flagscope version and scan mode, scan date);
+- a line after the header is not a `Name: ID` line;
+- the `Name: ID` lines are not sorted by name;
+- a name appears more than once.
+
+Source: user statement (2026-11-27), automated format check of contributed lists instead of review by reading alone.
 
 ### RF-10: Graphical user interface
 
