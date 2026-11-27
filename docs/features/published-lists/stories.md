@@ -31,7 +31,7 @@ Covers: RF-14.1, RF-14.2, RF-14.3, RF-14.4, RNF-01.2
 3. CA-07.3: With a local list present, `flagscope scan` states that it used the local list and does not contact `flagscope/feature-lists`.
 4. CA-07.4: With the network disconnected and no local list, the tool prints a message naming `flagscope/feature-lists` as unreachable, exits with a non-zero exit code, and leaves no list behind.
 
-**Status.** in progress
+**Status.** verified
 
 ## HU-08: Use the nearest published build
 
