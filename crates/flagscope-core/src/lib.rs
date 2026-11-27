@@ -246,3 +246,6 @@ mod tests {
         assert_eq!(feature.to_string(), "FileExplorerNavpaneFixes: 40767182");
     }
 }
+
+/// Deliberate formatting difference for CA-13.2; never merged.
+pub fn   badly_formatted ( ) { }
