@@ -10,6 +10,7 @@ mod descriptor;
 mod lists;
 mod pdb_symbols;
 mod progress;
+mod published;
 mod results;
 mod scan;
 
@@ -64,6 +65,22 @@ pub enum Error {
     Environment {
         /// The variable name.
         variable: &'static str,
+    },
+    /// `flagscope/feature-lists` could not be reached (RF-14.4).
+    #[error("cannot reach flagscope/feature-lists ({url}): {reason}")]
+    PublishedUnreachable {
+        /// The URL requested.
+        url: String,
+        /// What failed.
+        reason: String,
+    },
+    /// The published list is not a valid list for the installed build.
+    #[error("the published list {url} is not valid: {reason}")]
+    PublishedInvalid {
+        /// The URL requested.
+        url: String,
+        /// What is wrong with it.
+        reason: String,
     },
     /// The installed build has no saved list.
     #[error("no list is saved at {path}")]

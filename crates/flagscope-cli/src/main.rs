@@ -169,6 +169,7 @@ fn scan(
     }
     match &list.source {
         ListSource::Saved => eprintln!("{}", messages::loaded(&list)),
+        ListSource::Published(header) => eprintln!("{}", messages::published(&list, header)),
         ListSource::Scanned(report) | ListSource::Targeted(report) => {
             let kept = keep_symbol_files.then_some(report.symbol_directory.as_path());
             let mode = options.effective_mode();

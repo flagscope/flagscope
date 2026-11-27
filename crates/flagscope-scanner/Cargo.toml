@@ -13,6 +13,7 @@ flagscope-symbols.workspace = true
 ms-pdb.workspace = true
 object.workspace = true
 thiserror.workspace = true
+ureq.workspace = true
 windows-registry.workspace = true
 
 [lints]

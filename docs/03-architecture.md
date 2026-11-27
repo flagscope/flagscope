@@ -72,4 +72,5 @@ Dependency direction: `flagscope-cli` → `flagscope-scanner` → `flagscope-sym
 | AD-20 | Store the result of each distinct symbol file under the user's local application data, as text | `features/lighter-scans/decisions.md` |
 | AD-21 | Check that the symbol server answers before reading the system binaries, and divide the duration estimate by the parallel downloads | `features/lighter-scans/decisions.md` |
 | AD-22 | Saved lists carry the AD-16 header and a local source mark; only lists scanned here can be contributed | `features/published-lists/decisions.md` |
+| AD-23 | Download published lists from the raw-file URL of `main`, validate them, and save them as non-contributable local lists | `features/published-lists/decisions.md` |
 | AD-24 | Check pull requests with one GitHub Actions workflow of four jobs, with every tool pinned | `features/contributor-quality-gates/decisions.md` |
