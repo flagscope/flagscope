@@ -30,8 +30,8 @@
 The scope is delivered as seven features, in this order. Only the first has full documents so far.
 
 1. `find-feature-ids`: the installed build's feature list (first version). See `docs/features/find-feature-ids/`.
-2. `published-lists`: download the list of the installed build (or the nearest build) from `flagscope/feature-lists`, and prepare lists for contribution. (added 2026-11-26)
-3. `lighter-scans`: light and targeted scan modes, and reuse of unchanged symbol-file results across scans. (added 2026-11-26)
+2. `lighter-scans`: light and targeted scan modes, and reuse of unchanged symbol-file results across scans. (added 2026-11-26; moved before `published-lists` on 2026-11-26, because it changes the scan pipeline again and the full-scan verification of `find-feature-ids` is done once, after it)
+3. `published-lists`: download the list of the installed build (or the nearest build) from `flagscope/feature-lists`, and prepare lists for contribution. (added 2026-11-26)
 4. `contributor-quality-gates`: continuous integration for formatting, linting, tests by level, DCO sign-off, and secret scanning.
 5. `inspect-features`: read feature states, import mach2 lists, and fuzzy search.
 6. `toggle-features-safely`: change feature states with snapshots, elevation, and revert.

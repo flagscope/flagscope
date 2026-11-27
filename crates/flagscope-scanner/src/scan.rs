@@ -4,11 +4,18 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use flagscope_core::{Build, Feature, FeatureId};
-use flagscope_symbols::SymbolServer;
+use flagscope_symbols::{PdbReference, SymbolServer};
 
+use crate::progress::{Estimate, Progress, ScanObserver, expected_duration};
 use crate::{Error, build, candidates, extract_features, lists};
+
+/// Concurrent size requests while estimating (AD-18).
+const SIZE_REQUESTS_IN_PARALLEL: usize = 16;
+/// Bytes downloaded once to measure the transfer speed for the estimate.
+const SPEED_SAMPLE_BYTES: u64 = 4_000_000;
 
 /// Where and how a scan runs.
 #[derive(Debug, Clone)]
@@ -80,6 +87,8 @@ pub struct ScanStats {
     pub downloaded_bytes: u64,
     /// Largest amount of disk space the scan's symbol files took at one time.
     pub peak_disk_bytes: u64,
+    /// Time from the first download to the end of the scan.
+    pub download_duration: Duration,
 }
 
 /// The result of scanning a build.
@@ -111,7 +120,10 @@ pub struct ScanReport {
 /// Returns [`Error::Build`] if the build cannot be detected,
 /// [`Error::NoConnection`] if the symbol server cannot be reached, and
 /// [`Error::Download`] or [`Error::Io`] if a download or temporary file fails.
-pub fn scan_installed_build(options: &ScanOptions) -> Result<ScanReport, Error> {
+pub fn scan_installed_build(
+    options: &ScanOptions,
+    observer: &mut dyn ScanObserver,
+) -> Result<ScanReport, Error> {
     let build = build::installed_build()?;
     let mut stats = ScanStats::default();
     let mut found: BTreeMap<String, BTreeMap<FeatureId, Vec<PathBuf>>> = BTreeMap::new();
@@ -123,26 +135,46 @@ pub fn scan_installed_build(options: &ScanOptions) -> Result<ScanReport, Error> 
         .symbol_directory
         .join(format!("scan-{}", std::process::id()));
 
+    let mut chosen = Vec::new();
     for binary in candidates::system_binaries(&options.system_root) {
         stats.binaries_examined += 1;
-        let Some(reference) = candidate_reference(&binary) else {
-            continue;
-        };
-        // One directory per PDB identity: different binaries can share a PDB file name.
+        if let Some(reference) = candidate_reference(&binary) {
+            chosen.push((binary, reference));
+        }
+    }
+
+    let (sizes, per_request) = probe_sizes(&options.server, &chosen)?;
+    let mut downloads = Vec::new();
+    for ((binary, reference), size) in chosen.into_iter().zip(sizes) {
+        match size {
+            Some(size) => downloads.push((binary, reference, size)),
+            None => stats.without_public_pdb += 1,
+        }
+    }
+    let bytes_total: u64 = downloads.iter().map(|(_, _, size)| size).sum();
+    let largest = downloads.iter().max_by_key(|(_, _, size)| *size);
+    let speed = match largest {
+        Some((_, reference, _)) => measure_speed(&options.server, reference)?,
+        None => 0.0,
+    };
+    observer.estimated(&Estimate {
+        files: downloads.len(),
+        bytes: bytes_total,
+        duration: expected_duration(downloads.len(), bytes_total, per_request, speed),
+    });
+
+    let started = Instant::now();
+    for (index, (binary, reference, _)) in downloads.iter().enumerate() {
         let directory = run_directory.join(reference.server_path().replace('/', "_"));
-        let pdb = match options.server.download(&reference, &directory) {
+        let pdb = match options.server.download(reference, &directory) {
             Ok(pdb) => pdb,
             Err(flagscope_symbols::Error::Status { status: 404, .. }) => {
                 stats.without_public_pdb += 1;
                 continue;
             }
-            Err(flagscope_symbols::Error::Connection { url, .. }) => {
+            Err(error) => {
                 remove_all(&created, &run_directory, &options.symbol_directory);
-                return Err(Error::NoConnection { url });
-            }
-            Err(source) => {
-                remove_all(&created, &run_directory, &options.symbol_directory);
-                return Err(Error::Download { source });
+                return Err(download_error(error));
             }
         };
         created.push(directory.clone());
@@ -150,7 +182,7 @@ pub fn scan_installed_build(options: &ScanOptions) -> Result<ScanReport, Error> 
         stats.downloaded_bytes += pdb.size;
         disk_bytes += pdb.size;
         stats.peak_disk_bytes = stats.peak_disk_bytes.max(disk_bytes);
-        let extraction = extract_features(&pdb.path, &binary);
+        let extraction = extract_features(&pdb.path, binary);
         if !options.keep_symbol_files {
             remove_directory(&directory);
             disk_bytes -= pdb.size;
@@ -174,7 +206,15 @@ pub fn scan_installed_build(options: &ScanOptions) -> Result<ScanReport, Error> 
                 return Err(error);
             }
         }
+        observer.progressed(&Progress {
+            files_done: index + 1,
+            files_total: downloads.len(),
+            bytes_done: stats.downloaded_bytes,
+            bytes_total,
+            elapsed: started.elapsed(),
+        });
     }
+    stats.download_duration = started.elapsed();
     // Removes the scan's directories if nothing is left in them.
     let _ = fs::remove_dir(&run_directory);
     let _ = fs::remove_dir(&options.symbol_directory);
@@ -187,6 +227,78 @@ pub fn scan_installed_build(options: &ScanOptions) -> Result<ScanReport, Error> 
         stats,
         symbol_directory: run_directory,
     })
+}
+
+/// Asks the server for the size of every chosen PDB, several requests at a
+/// time (AD-18). Returns the sizes in the order of `chosen` (`None` for a PDB
+/// that is not published) and the average time per request.
+fn probe_sizes(
+    server: &SymbolServer,
+    chosen: &[(PathBuf, PdbReference)],
+) -> Result<(Vec<Option<u64>>, Duration), Error> {
+    if chosen.is_empty() {
+        return Ok((Vec::new(), Duration::ZERO));
+    }
+    let chunk = chosen.len().div_ceil(SIZE_REQUESTS_IN_PARALLEL);
+    let results = std::thread::scope(|scope| {
+        let workers: Vec<_> = chosen
+            .chunks(chunk)
+            .map(|part| {
+                scope.spawn(move || {
+                    let started = Instant::now();
+                    let sizes: Result<Vec<_>, _> = part
+                        .iter()
+                        .map(|(_, reference)| server.size(reference))
+                        .collect();
+                    sizes.map(|sizes| (sizes, started.elapsed()))
+                })
+            })
+            .collect();
+        workers
+            .into_iter()
+            .map(|worker| {
+                worker
+                    .join()
+                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+            })
+            .collect::<Vec<_>>()
+    });
+
+    let mut sizes = Vec::with_capacity(chosen.len());
+    let mut busy = Duration::ZERO;
+    for result in results {
+        let (part, elapsed) = result.map_err(download_error)?;
+        sizes.extend(part);
+        busy += elapsed;
+    }
+    let per_request = busy / u32::try_from(chosen.len()).unwrap_or(u32::MAX);
+    Ok((sizes, per_request))
+}
+
+/// Measures the transfer speed, in bytes per second, by downloading the start
+/// of one PDB.
+fn measure_speed(server: &SymbolServer, reference: &PdbReference) -> Result<f64, Error> {
+    let started = Instant::now();
+    let bytes = server
+        .sample(reference, SPEED_SAMPLE_BYTES)
+        .map_err(download_error)?;
+    let seconds = started.elapsed().as_secs_f64();
+    // Display only: the precision lost converting bytes to f64 does not matter.
+    #[allow(clippy::cast_precision_loss)]
+    let speed = if seconds > 0.0 {
+        bytes as f64 / seconds
+    } else {
+        0.0
+    };
+    Ok(speed)
+}
+
+/// Maps a failed request to the scan error the user sees.
+fn download_error(error: flagscope_symbols::Error) -> Error {
+    match error {
+        flagscope_symbols::Error::Connection { url, .. } => Error::NoConnection { url },
+        source => Error::Download { source },
+    }
 }
 
 /// Returns the PDB reference of `binary` if the scan should download its PDB.
@@ -246,7 +358,11 @@ pub struct FeatureList {
 ///
 /// Returns the errors of [`scan_installed_build`], and [`Error::Io`] if the
 /// saved list cannot be read or the new one cannot be saved.
-pub fn feature_list(options: &ScanOptions, rescan: bool) -> Result<FeatureList, Error> {
+pub fn feature_list(
+    options: &ScanOptions,
+    rescan: bool,
+    observer: &mut dyn ScanObserver,
+) -> Result<FeatureList, Error> {
     let build = build::installed_build()?;
     let saved_at = lists::path(&options.lists_directory, build);
     if !rescan && let Some(features) = lists::load(&saved_at)? {
@@ -257,7 +373,7 @@ pub fn feature_list(options: &ScanOptions, rescan: bool) -> Result<FeatureList, 
             source: ListSource::Saved,
         });
     }
-    let report = scan_installed_build(options)?;
+    let report = scan_installed_build(options, observer)?;
     lists::save(&saved_at, &report.features)?;
     Ok(FeatureList {
         build: report.build,

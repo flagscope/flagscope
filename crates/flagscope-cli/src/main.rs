@@ -1,5 +1,6 @@
 //! `flagscope`: find the hidden features of the installed Windows build.
 
+mod console;
 mod messages;
 
 use std::fs::{self, OpenOptions};
@@ -105,7 +106,10 @@ fn scan(
     let rescan = rescan || keep_symbol_files;
     let build = flagscope_scanner::installed_build()?;
     eprintln!("{}", messages::starting(build, rescan));
-    let list = flagscope_scanner::feature_list(&options, rescan)?;
+    let mut progress = console::ConsoleProgress::new();
+    let list = flagscope_scanner::feature_list(&options, rescan, &mut progress);
+    progress.finish();
+    let list = list?;
 
     if let Some(path) = output {
         write_output(path, &list.features, overwrite)?;
@@ -119,6 +123,7 @@ fn scan(
         ListSource::Scanned(report) => {
             let kept = keep_symbol_files.then_some(report.symbol_directory.as_path());
             eprintln!("{}", messages::summary(report, &list.saved_at, kept));
+            eprintln!("{}", messages::actual(report, progress.estimate.as_ref()));
         }
     }
     if let Some(path) = output {

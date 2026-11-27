@@ -48,7 +48,7 @@ Covers: RF-11.1, RF-11.2
 2. CA-03.2: The entries printed to the console are the same as the entries in the file, in the same order.
 3. CA-03.3: When the given file already exists, the tool does not overwrite it unless the user passes the explicit overwrite option. (proposed by the assistant, accepted with the approval of this feature)
 
-**Status.** verified
+**Status.** in progress
 
 ## HU-04: See the estimate and the progress of a scan
 
@@ -62,7 +62,7 @@ Covers: RF-13.1, RF-13.2
 2. CA-04.2: While the scan runs, the tool shows the progress as a percentage and an estimated time remaining, and both values change as the scan advances.
 3. CA-04.3: When the scan ends, the tool prints the actual total download size and the actual duration, so that they can be compared with the estimate.
 
-**Status.** pending
+**Status.** in progress
 
 ## HU-05: Reuse saved lists and clean up symbol files
 

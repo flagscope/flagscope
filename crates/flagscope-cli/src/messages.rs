@@ -3,9 +3,10 @@
 //! Kept in one module so that the translation layer can replace it (RNF-02).
 
 use std::path::Path;
+use std::time::Duration;
 
 use flagscope_core::Build;
-use flagscope_scanner::{Error, FeatureList, ScanReport};
+use flagscope_scanner::{Error, Estimate, FeatureList, Progress, ScanReport};
 
 use crate::CliError;
 
@@ -17,6 +18,63 @@ const MEGABYTE: f64 = 1_000_000.0;
 #[allow(clippy::cast_precision_loss)]
 fn megabytes(bytes: u64) -> f64 {
     bytes as f64 / MEGABYTE
+}
+
+/// A duration for people: `1 h 05 min`, `12 min 30 s`, or `45 s`.
+fn duration(duration: Duration) -> String {
+    let seconds = duration.as_secs();
+    let (hours, minutes, seconds) = (seconds / 3600, seconds / 60 % 60, seconds % 60);
+    if hours > 0 {
+        format!("{hours} h {minutes:02} min")
+    } else if minutes > 0 {
+        format!("{minutes} min {seconds:02} s")
+    } else {
+        format!("{seconds} s")
+    }
+}
+
+/// Shown once before the first download (RF-13.1).
+pub fn estimate(estimate: &Estimate) -> String {
+    format!(
+        "About to download {files} symbol files, {size:.1} MB in total. \
+         Estimated time: {time} at the current connection speed.",
+        files = estimate.files,
+        size = megabytes(estimate.bytes),
+        time = duration(estimate.duration),
+    )
+}
+
+/// The progress line while a scan runs (RF-13.2).
+pub fn progress(progress: &Progress) -> String {
+    let remaining = progress
+        .remaining()
+        .map_or_else(|| "calculating".to_owned(), duration);
+    format!(
+        "{percent:5.1}% | {done}/{total} files | {downloaded:.0} of {size:.0} MB | {remaining} left",
+        percent = progress.fraction() * 100.0,
+        done = progress.files_done,
+        total = progress.files_total,
+        downloaded = megabytes(progress.bytes_done),
+        size = megabytes(progress.bytes_total),
+    )
+}
+
+/// Actual download size and duration, next to the estimate (RF-13, CA-04.3).
+pub fn actual(report: &ScanReport, estimate: Option<&Estimate>) -> String {
+    let stats = &report.stats;
+    let actual = format!(
+        "Downloaded {size:.1} MB in {time}",
+        size = megabytes(stats.downloaded_bytes),
+        time = duration(stats.download_duration),
+    );
+    match estimate {
+        Some(estimate) => format!(
+            "{actual} (estimated: {size:.1} MB in {time}).",
+            size = megabytes(estimate.bytes),
+            time = duration(estimate.duration),
+        ),
+        None => format!("{actual}."),
+    }
 }
 
 /// Shown before the list is loaded or scanned.

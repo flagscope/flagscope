@@ -184,3 +184,15 @@ Alternatives considered:
 Decision: `flagscope scan` returns the saved list of the installed build when it exists and scans otherwise; `--rescan` forces a scan; `--keep-symbol-files` keeps the downloaded files and implies `--rescan`. A saved list is written to a temporary file and renamed, so no partial list is ever left (RF-06.3).
 Consequences: the command name says "scan" even when it only loads a list; the messages say which happened. When published lists arrive (RF-14), the same command gains a third source, and this decision is revisited.
 Status: active
+
+## AD-18: Estimate a scan by asking the server for every size in parallel and timing one partial download
+
+Date: 2026-11-26
+Context: HU-04 shows the download size and duration before the first download (RF-13.1). The symbol server returns a PDB's size to a `HEAD` request without sending the file, but each request takes about 0.4 s, so asking for about 2,440 sizes one after another would take about 16 minutes before the scan starts.
+Alternatives considered:
+- Sequential `HEAD` requests: simplest, but adds about 16 minutes to every scan.
+- No size estimate, only progress by file count: no extra requests, but the user does not learn the download size before it starts, which RF-13.1 requires.
+- Remembering the sizes of an earlier scan: free for a second scan of the same build, but useless for the first scan, which is the one that matters.
+Decision: before downloading, the scanner sends the `HEAD` requests on 16 threads (`std::thread::scope`, as AD-07 allows), and downloads the first 4 MB of the largest PDB once to measure the transfer speed. The estimated duration is the number of files times the average time per request plus the total size divided by the measured speed. While the scan runs, the remaining time is recalculated from the progress so far, with files and bytes weighted equally.
+Consequences: the estimate costs about one minute and 4 MB per scan. A `HEAD` request that finds no PDB (404) also tells the scan to skip that binary, so those binaries are no longer downloaded. The first estimate on build 26300.10075 predicted 7,952.3 MB, the size the full scans downloaded, and 42 min 56 s.
+Status: active

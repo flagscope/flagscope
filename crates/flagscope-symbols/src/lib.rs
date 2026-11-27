@@ -179,6 +179,51 @@ impl SymbolServer {
         Self::new(MICROSOFT_SYMBOL_SERVER)
     }
 
+    /// Returns the size in bytes of the PDB on the server, without downloading
+    /// it, or `None` if the server does not publish it (HTTP 404).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Status`] for other unexpected answers and
+    /// [`Error::Connection`] if the server cannot be reached.
+    pub fn size(&self, reference: &PdbReference) -> Result<Option<u64>, Error> {
+        let url = format!("{}/{}", self.base_url, reference.server_path());
+        let response = match self.agent.head(&url).call() {
+            Ok(response) => response,
+            Err(ureq::Error::StatusCode(404)) => return Ok(None),
+            Err(source) => return Err(request_error(&url, source)),
+        };
+        Ok(response
+            .headers()
+            .get("content-length")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse().ok()))
+    }
+
+    /// Downloads the first `length` bytes of the PDB and discards them, to
+    /// measure the transfer speed. Returns the number of bytes received.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Status`] if the server answers without the file and
+    /// [`Error::Connection`] if it cannot be reached or the transfer fails.
+    pub fn sample(&self, reference: &PdbReference, length: u64) -> Result<u64, Error> {
+        let url = format!("{}/{}", self.base_url, reference.server_path());
+        let range = format!("bytes=0-{}", length.saturating_sub(1));
+        let response = self
+            .agent
+            .get(&url)
+            .header("Range", &range)
+            .call()
+            .map_err(|source| request_error(&url, source))?;
+        io::copy(&mut response.into_body().into_reader(), &mut io::sink()).map_err(|source| {
+            Error::Connection {
+                url,
+                source: Box::new(ureq::Error::Io(source)),
+            }
+        })
+    }
+
     /// Downloads the PDB into `directory`, keeping its file name.
     ///
     /// A partially written file is removed when the download fails.
@@ -194,16 +239,11 @@ impl SymbolServer {
         directory: &Path,
     ) -> Result<DownloadedFile, Error> {
         let url = format!("{}/{}", self.base_url, reference.server_path());
-        let response = self.agent.get(&url).call().map_err(|source| match source {
-            ureq::Error::StatusCode(status) => Error::Status {
-                url: url.clone(),
-                status,
-            },
-            source => Error::Connection {
-                url: url.clone(),
-                source: Box::new(source),
-            },
-        })?;
+        let response = self
+            .agent
+            .get(&url)
+            .call()
+            .map_err(|source| request_error(&url, source))?;
 
         let path = directory.join(&reference.file_name);
         let io_error = |source| Error::Io {
@@ -221,6 +261,21 @@ impl SymbolServer {
                 Err(io_error(source))
             }
         }
+    }
+}
+
+/// Classifies a failed request: an HTTP status from the server, or a failure
+/// to reach it.
+fn request_error(url: &str, source: ureq::Error) -> Error {
+    match source {
+        ureq::Error::StatusCode(status) => Error::Status {
+            url: url.to_owned(),
+            status,
+        },
+        source => Error::Connection {
+            url: url.to_owned(),
+            source: Box::new(source),
+        },
     }
 }
 

@@ -12,6 +12,8 @@
 4. HU-05: depends on HU-02. Saved lists and clean-up make repeated runs practical.
 5. HU-04: depends on HU-02. The estimate needs the list of symbol files to download, and its accuracy can be compared with the sizes HU-05 measures.
 
+6. Verification batch: because HU-03, HU-04, and HU-05 each change the scan flow, a change reopens the criteria the earlier stories passed. Their full-scan criteria are observed together once all five stories are implemented: one full scan with an output file, one run from the saved list, one `--rescan` run keeping symbol files, and one run without network. (added 2026-11-26) On 2026-11-26 the user agreed to run this batch after the `lighter-scans` feature instead, which changes the scan pipeline again, so that one batch verifies both features with shorter scans.
+
 ## Dependencies
 
 - HU-02, HU-03, HU-04, and HU-05 all depend on HU-01: without names and IDs in the symbol files there is nothing to scan.

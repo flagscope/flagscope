@@ -9,9 +9,11 @@ mod candidates;
 mod descriptor;
 mod lists;
 mod pdb_symbols;
+mod progress;
 mod scan;
 
 pub use build::installed_build;
+pub use progress::{Estimate, NoObserver, Progress, ScanObserver};
 pub use scan::{
     Conflict, FeatureList, ListSource, ScanOptions, ScanReport, ScanStats, feature_list,
     scan_installed_build,
