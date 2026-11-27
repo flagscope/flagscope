@@ -19,7 +19,7 @@ Covers: RF-19.1, RF-19.2, RF-19.4, RF-19.5
 3. CA-18.3: A pull request that adds a list without its `Scanned:` line shows the format check as failed, and its log names the file and the missing line.
 4. CA-18.4: A pull request that changes only `README.md` does not show the format check as failed.
 
-**Status.** in progress
+**Status.** verified
 
 ## HU-19: A contributed list is checked line by line
 
@@ -34,4 +34,4 @@ Covers: RF-19.3, RF-19.4
 3. CA-19.3: A pull request that duplicates one feature line of the published list shows the format check as failed, and its log names the file and the duplicated name.
 4. CA-19.4: A pull request that makes the three changes above in one list shows the format check as failed, and its log names all three problems.
 
-**Status.** in progress
+**Status.** verified
