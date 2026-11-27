@@ -33,6 +33,7 @@ Only content that adds value to the project is committed: source code, tests, do
 - While the project has a single maintainer, GitHub does not let the maintainer approve their own pull requests; those are merged after the maintainer reviews the diff. Once there are two or more maintainers, every pull request needs another maintainer's approval.
 - Automated AI review may run on pull requests, but it is advisory only and never replaces human approval.
 - Changes reach the default branch only through pull requests.
+- A branch is named `<type>/<subject>`. The type says what kind of change it is (`feat`, `fix`, `docs`, `ci`, `test`). The subject says in English kebab-case what the change does, for example `feat/published-lists` or `docs/feature-lists-format-check`. A branch name never holds a date, a session, or a person's name.
 
 ## Language
 

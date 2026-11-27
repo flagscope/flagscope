@@ -28,7 +28,7 @@
 
 ## Delivery order
 
-The scope is delivered as eight features, in this order. Only the first has full documents so far.
+The scope is delivered as eight features, in this order. Features 1 to 5 have full documents; all their stories are verified except HU-08 (`published-lists`), which waits for the next cumulative update (2026-11-27). Features 6 to 8 are only named. The next session starts `inspect-features` at Phase 3: propose its slicing, then write its requirements, stories, and plan.
 
 1. `find-feature-ids`: the installed build's feature list (first version). See `docs/features/find-feature-ids/`.
 2. `lighter-scans`: light and targeted scan modes, and reuse of unchanged symbol-file results across scans. (added 2026-11-26; moved before `published-lists` on 2026-11-26, because it changes the scan pipeline again and the full-scan verification of `find-feature-ids` is done once, after it)
