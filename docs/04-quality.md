@@ -28,6 +28,7 @@
 | 2026-11-26 | Full scan, default options (HU-05 code): duration and peak disk | 3,081 s; peak 354.8 MB (the largest single PDB, `windows.ui.xaml.pdb`); 0 symbol files left | HU-05 verification, run 1 |
 | 2026-11-26 | Full scan keeping symbol files: duration and disk | 3,485 s; 2,413 downloads, 2,383 distinct files kept (6.2 GiB); the scan reported a peak of 7,952.3 MB because it counts the 30 repeated downloads of an identical PDB, which overwrite the same file | HU-05 verification, run 3 |
 | 2026-11-26 | Loading the saved list | 0 s, no symbol directory created | HU-05 verification, run 2 |
+| 2026-11-26 | Light vs full mode on a sample root (copies of `shell32.dll`, `twinui.dll`, `Windows.UI.Xaml.dll`, `explorer.exe`, plus a second copy of `shell32.dll`) | Light: 74.2 MB, 28 s, peak disk 0; full: 386.2 MB, 107 s, peak 354.8 MB; full keeping files: peak 386.2 MB, 4 files on disk; same 556 features in all three; 5 binaries read from 4 downloads | HU-09 development check, not a criterion |
 
 ## Verification log
 
@@ -60,3 +61,4 @@
 | HU-04 | CA-04.2: shows progress as a percentage and the estimated time remaining, both changing | pass | 2026-11-26 | Same run, stopped after 250 s, printed (one line per minute, because standard error was redirected): `0.0% ... 49 min 38 s left`, `2.4% ... 41 min 08 s left`, `4.7% ... 41 min 34 s left`. The saved list was unchanged afterwards (same SHA-256) and the interrupted scan's symbol folder was deleted. |
 | HU-04 | CA-04.3: at the end, prints the actual download size and duration next to the estimate | blocked | 2026-11-26 | Needs a completed scan (about 50 minutes, 8 GB). |
 | HU-02, HU-03, HU-05 | CA-02.1, CA-02.3, CA-03.1, CA-03.2, CA-05.1, CA-05.3, CA-05.4, CA-05.5 | blocked | 2026-11-26 | Reopened: HU-04 changed the scan pipeline (size requests before downloading, error mapping) and the `scan` command flow, which these passes covered. To be observed again in one verification batch at the end of the feature, together with CA-02.4, CA-04.3, and CA-05.2. |
+| HU-04 | CA-04.1 (reworded on 2026-11-26) | blocked | 2026-11-26 | The earlier `pass` observed the old wording in full mode only. The reworded criterion, which adds the amount downloaded to compute the estimate, is observed in the verification batch. |

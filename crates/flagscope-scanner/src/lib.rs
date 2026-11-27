@@ -15,7 +15,7 @@ mod scan;
 pub use build::installed_build;
 pub use progress::{Estimate, NoObserver, Progress, ScanObserver};
 pub use scan::{
-    Conflict, FeatureList, ListSource, ScanOptions, ScanReport, ScanStats, feature_list,
+    Conflict, FeatureList, ListSource, ScanMode, ScanOptions, ScanReport, ScanStats, feature_list,
     scan_installed_build,
 };
 
@@ -95,10 +95,17 @@ pub struct Extraction {
 /// Returns [`Error::Pdb`] if the PDB cannot be read, [`Error::Io`] if the
 /// binary cannot be read, and [`Error::Binary`] if it is not a PE image.
 pub fn extract_features(pdb: &Path, binary: &Path) -> Result<Extraction, Error> {
+    let symbols = pdb_symbols::descriptor_symbols(pdb)?;
+    read_descriptors(symbols, binary)
+}
+
+/// Reads from `binary` the ID of each descriptor named in its PDB.
+pub(crate) fn read_descriptors(
+    symbols: Vec<pdb_symbols::DescriptorSymbol>,
+    binary: &Path,
+) -> Result<Extraction, Error> {
     use object::Object as _;
     use object::ObjectSection as _;
-
-    let symbols = pdb_symbols::descriptor_symbols(pdb)?;
 
     let data = fs::read(binary).map_err(|source| Error::Io {
         path: binary.to_owned(),

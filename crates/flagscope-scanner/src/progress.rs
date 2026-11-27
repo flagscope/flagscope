@@ -11,6 +11,9 @@ pub struct Estimate {
     pub bytes: u64,
     /// Expected duration of the downloads.
     pub duration: Duration,
+    /// Bytes already downloaded to plan the scan: in light mode, the headers
+    /// and stream directories of the symbol files. Not part of `bytes`.
+    pub planning_bytes: u64,
 }
 
 /// How far a scan has got.

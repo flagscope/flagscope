@@ -58,7 +58,7 @@ Covers: RF-13.1, RF-13.2
 
 **Acceptance criteria.**
 
-1. CA-04.1: Before the first download starts, the tool prints the estimated total download size and the estimated duration.
+1. CA-04.1: Before downloading the contents of the symbol files, the tool prints the estimated total download size and the estimated duration, and how much it downloaded to compute them. (reworded on 2026-11-26 with the user's approval: in light mode the estimate needs the file headers first, AD-19)
 2. CA-04.2: While the scan runs, the tool shows the progress as a percentage and an estimated time remaining, and both values change as the scan advances.
 3. CA-04.3: When the scan ends, the tool prints the actual total download size and the actual duration, so that they can be compared with the estimate.
 

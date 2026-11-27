@@ -6,7 +6,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use flagscope_core::Build;
-use flagscope_scanner::{Error, Estimate, FeatureList, Progress, ScanReport};
+use flagscope_scanner::{Error, Estimate, FeatureList, Progress, ScanMode, ScanReport};
 
 use crate::CliError;
 
@@ -35,8 +35,16 @@ fn duration(duration: Duration) -> String {
 
 /// Shown once before the first download (RF-13.1).
 pub fn estimate(estimate: &Estimate) -> String {
+    let planning = if estimate.planning_bytes > 0 {
+        format!(
+            "Read the structure of the symbol files ({:.1} MB). ",
+            megabytes(estimate.planning_bytes)
+        )
+    } else {
+        String::new()
+    };
     format!(
-        "About to download {files} symbol files, {size:.1} MB in total. \
+        "{planning}About to download {files} symbol files, {size:.1} MB in total. \
          Estimated time: {time} at the current connection speed.",
         files = estimate.files,
         size = megabytes(estimate.bytes),
@@ -106,16 +114,27 @@ pub fn loaded(list: &FeatureList) -> String {
 }
 
 /// Summary printed after a scan.
-pub fn summary(report: &ScanReport, saved_at: &Path, symbol_directory: Option<&Path>) -> String {
+pub fn summary(
+    report: &ScanReport,
+    saved_at: &Path,
+    mode: ScanMode,
+    symbol_directory: Option<&Path>,
+) -> String {
     let stats = &report.stats;
-    let files = match symbol_directory {
-        Some(directory) => format!(
+    let files = match (mode, symbol_directory) {
+        (ScanMode::Light, _) => format!(
+            "Light scan: the needed parts of {count} symbol files were downloaded ({size:.1} MB) \
+             and read in memory; nothing was written to disk.",
+            count = stats.symbol_files_downloaded,
+            size = megabytes(stats.downloaded_bytes),
+        ),
+        (ScanMode::Full, Some(directory)) => format!(
             "{count} symbol files downloaded ({size:.1} MB) and kept in {path}.",
             count = stats.symbol_files_downloaded,
             size = megabytes(stats.downloaded_bytes),
             path = directory.display(),
         ),
-        None => format!(
+        (ScanMode::Full, None) => format!(
             "{count} symbol files downloaded ({size:.1} MB); all of them were deleted.",
             count = stats.symbol_files_downloaded,
             size = megabytes(stats.downloaded_bytes),

@@ -122,7 +122,8 @@ fn scan(
         ListSource::Saved => eprintln!("{}", messages::loaded(&list)),
         ListSource::Scanned(report) => {
             let kept = keep_symbol_files.then_some(report.symbol_directory.as_path());
-            eprintln!("{}", messages::summary(report, &list.saved_at, kept));
+            let mode = options.effective_mode();
+            eprintln!("{}", messages::summary(report, &list.saved_at, mode, kept));
             eprintln!("{}", messages::actual(report, progress.estimate.as_ref()));
         }
     }

@@ -17,7 +17,7 @@ Covers: RF-16.1, RF-16.2, RNF-08.2
 3. CA-09.3: The number of symbol files it reports as downloaded equals the number of distinct symbol files among the binaries it scanned.
 4. CA-09.4: With symbol files kept, the peak disk space the scan reports equals the total size of the files left on disk.
 
-**Status.** pending
+**Status.** in progress
 
 ## HU-10: Keep complete symbol files
 

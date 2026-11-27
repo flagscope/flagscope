@@ -68,3 +68,4 @@ Dependency direction: `flagscope-cli` → `flagscope-scanner` → `flagscope-sym
 | AD-16 | Store published lists as one text file per build, grouped by architecture and major build | `features/published-lists/decisions.md` |
 | AD-17 | `flagscope scan` uses the saved list by default; `--keep-symbol-files` implies a new scan | `features/find-feature-ids/decisions.md` |
 | AD-18 | Estimate a scan by asking the server for every size in parallel and timing one partial download | `features/find-feature-ids/decisions.md` |
+| AD-19 | Read light-mode symbol files from memory, and download distinct symbol files in parallel | `features/lighter-scans/decisions.md` |

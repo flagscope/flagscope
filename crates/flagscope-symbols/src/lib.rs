@@ -200,6 +200,55 @@ impl SymbolServer {
             .and_then(|value| value.parse().ok()))
     }
 
+    /// Downloads `length` bytes of the PDB starting at `start`, and returns
+    /// them with the size of the whole file.
+    ///
+    /// When the server ignores the range and sends the whole file, the
+    /// requested part is cut from it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Status`] if the server answers without the file and
+    /// [`Error::Connection`] if it cannot be reached or the transfer fails.
+    pub fn fetch_range(
+        &self,
+        reference: &PdbReference,
+        start: u64,
+        length: u64,
+    ) -> Result<(Vec<u8>, u64), Error> {
+        let url = format!("{}/{}", self.base_url, reference.server_path());
+        let range = format!("bytes={start}-{}", start + length.saturating_sub(1));
+        let response = self
+            .agent
+            .get(&url)
+            .header("Range", &range)
+            .call()
+            .map_err(|source| request_error(&url, source))?;
+        let partial = response.status().as_u16() == 206;
+        // "bytes <first>-<last>/<total>"
+        let total = response
+            .headers()
+            .get("content-range")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.rsplit('/').next())
+            .and_then(|value| value.parse::<u64>().ok());
+        let mut body = Vec::new();
+        io::copy(&mut response.into_body().into_reader(), &mut body).map_err(|source| {
+            Error::Connection {
+                url,
+                source: Box::new(ureq::Error::Io(source)),
+            }
+        })?;
+        if partial {
+            let total = total.unwrap_or(start + body.len() as u64);
+            return Ok((body, total));
+        }
+        let total = body.len() as u64;
+        let first = usize::try_from(start.min(total)).unwrap_or(usize::MAX);
+        let last = usize::try_from((start + length).min(total)).unwrap_or(usize::MAX);
+        Ok((body[first..last].to_vec(), total))
+    }
+
     /// Downloads the first `length` bytes of the PDB and discards them, to
     /// measure the transfer speed. Returns the number of bytes received.
     ///

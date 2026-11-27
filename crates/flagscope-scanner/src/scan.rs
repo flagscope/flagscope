@@ -1,21 +1,37 @@
 //! The build scan pipeline: choose binaries, download their PDBs, extract and
 //! merge features.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Mutex, PoisonError, mpsc};
 use std::time::{Duration, Instant};
 
 use flagscope_core::{Build, Feature, FeatureId};
 use flagscope_symbols::{PdbReference, SymbolServer};
 
+use crate::pdb_symbols::{self, PartialError, PartialPlan};
 use crate::progress::{Estimate, Progress, ScanObserver, expected_duration};
-use crate::{Error, build, candidates, extract_features, lists};
+use crate::{Error, Extraction, build, candidates, extract_features, lists, read_descriptors};
 
-/// Concurrent size requests while estimating (AD-18).
-const SIZE_REQUESTS_IN_PARALLEL: usize = 16;
+/// Concurrent requests while planning a scan (AD-18, AD-19).
+const PLANNING_WORKERS: usize = 16;
+/// Concurrent symbol files being downloaded and read (AD-19).
+const DOWNLOAD_WORKERS: usize = 8;
 /// Bytes downloaded once to measure the transfer speed for the estimate.
 const SPEED_SAMPLE_BYTES: u64 = 4_000_000;
+
+/// How a scan downloads symbol files (RF-16).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ScanMode {
+    /// Only the parts of each symbol file the scanner reads, held in memory
+    /// (RF-16.1). The default.
+    #[default]
+    Light,
+    /// Complete symbol files, written to disk (RF-16.3).
+    Full,
+}
 
 /// Where and how a scan runs.
 #[derive(Debug, Clone)]
@@ -24,8 +40,10 @@ pub struct ScanOptions {
     pub system_root: PathBuf,
     /// Directory for downloaded symbol files.
     pub symbol_directory: PathBuf,
+    /// How symbol files are downloaded.
+    pub mode: ScanMode,
     /// Keep downloaded symbol files instead of deleting each one once its
-    /// features have been extracted (RF-12).
+    /// features have been extracted (RF-12). Selects full mode.
     pub keep_symbol_files: bool,
     /// Directory of saved lists, one `<build>.txt` per build (AD-09).
     pub lists_directory: PathBuf,
@@ -52,10 +70,24 @@ impl ScanOptions {
         Ok(Self {
             system_root: variable("SystemRoot")?,
             symbol_directory: data.join("symbols"),
+            mode: ScanMode::Light,
             keep_symbol_files: false,
             lists_directory: data.join("lists"),
             server: SymbolServer::microsoft(),
         })
+    }
+}
+
+impl ScanOptions {
+    /// The mode the scan uses: keeping symbol files needs complete files, so
+    /// it selects full mode (RF-16.3).
+    #[must_use]
+    pub fn effective_mode(&self) -> ScanMode {
+        if self.keep_symbol_files {
+            ScanMode::Full
+        } else {
+            self.mode
+        }
     }
 }
 
@@ -110,10 +142,13 @@ pub struct ScanReport {
 /// Scans the installed build and returns its feature list, without reading or
 /// saving lists (see [`feature_list`] for that).
 ///
-/// Symbol files are deleted as the scan goes unless
-/// [`ScanOptions::keep_symbol_files`] is set. The scan stops at the first
-/// download that fails for any reason other than the PDB not being published,
-/// deletes the symbol files it downloaded, and returns no list.
+/// Each distinct symbol file is downloaded once, even when several binaries
+/// reference it (RF-16.2), and several are downloaded at a time (AD-19). In
+/// light mode only the parts the scanner reads are downloaded, into memory;
+/// in full mode complete files are written to disk and deleted after use
+/// unless [`ScanOptions::keep_symbol_files`] is set. The scan stops at the
+/// first request that fails for any reason other than a symbol file not being
+/// published, deletes the files it wrote, and returns no list.
 ///
 /// # Errors
 ///
@@ -125,95 +160,107 @@ pub fn scan_installed_build(
     observer: &mut dyn ScanObserver,
 ) -> Result<ScanReport, Error> {
     let build = build::installed_build()?;
+    let mode = options.effective_mode();
     let mut stats = ScanStats::default();
-    let mut found: BTreeMap<String, BTreeMap<FeatureId, Vec<PathBuf>>> = BTreeMap::new();
-    // Directories this scan created, so that a failed scan removes only its own files.
-    let mut created: Vec<PathBuf> = Vec::new();
-    let mut disk_bytes: u64 = 0;
     // One directory per process, so that two scans running at once never share files.
     let run_directory = options
         .symbol_directory
         .join(format!("scan-{}", std::process::id()));
 
-    let mut chosen = Vec::new();
-    for binary in candidates::system_binaries(&options.system_root) {
-        stats.binaries_examined += 1;
-        if let Some(reference) = candidate_reference(&binary) {
-            chosen.push((binary, reference));
+    let targets = choose_targets(&options.system_root, &mut stats);
+    let planning = plan_targets(&options.server, &targets, mode)?;
+    stats.downloaded_bytes += planning.bytes;
+    let mut work = Vec::new();
+    for (index, plan) in planning.plans.into_iter().enumerate() {
+        match plan {
+            Plan::Missing => stats.without_public_pdb += targets[index].binaries.len(),
+            plan => work.push((index, plan)),
         }
     }
-
-    let (sizes, per_request) = probe_sizes(&options.server, &chosen)?;
-    let mut downloads = Vec::new();
-    for ((binary, reference), size) in chosen.into_iter().zip(sizes) {
-        match size {
-            Some(size) => downloads.push((binary, reference, size)),
-            None => stats.without_public_pdb += 1,
-        }
-    }
-    let bytes_total: u64 = downloads.iter().map(|(_, _, size)| size).sum();
-    let largest = downloads.iter().max_by_key(|(_, _, size)| *size);
+    let bytes_total: u64 = work.iter().map(|(_, plan)| plan.remaining_bytes()).sum();
+    let requests: usize = work.iter().map(|(_, plan)| plan.remaining_requests()).sum();
+    let largest = work.iter().max_by_key(|(_, plan)| plan.remaining_bytes());
     let speed = match largest {
-        Some((_, reference, _)) => measure_speed(&options.server, reference)?,
+        Some((index, _)) => measure_speed(&options.server, &targets[*index].reference)?,
         None => 0.0,
     };
     observer.estimated(&Estimate {
-        files: downloads.len(),
+        files: work.len(),
         bytes: bytes_total,
-        duration: expected_duration(downloads.len(), bytes_total, per_request, speed),
+        duration: expected_duration(requests, bytes_total, planning.per_request, speed),
+        planning_bytes: planning.bytes,
     });
 
     let started = Instant::now();
-    for (index, (binary, reference, _)) in downloads.iter().enumerate() {
-        let directory = run_directory.join(reference.server_path().replace('/', "_"));
-        let pdb = match options.server.download(reference, &directory) {
-            Ok(pdb) => pdb,
-            Err(flagscope_symbols::Error::Status { status: 404, .. }) => {
-                stats.without_public_pdb += 1;
-                continue;
-            }
-            Err(error) => {
-                remove_all(&created, &run_directory, &options.symbol_directory);
-                return Err(download_error(error));
-            }
-        };
-        created.push(directory.clone());
-        stats.symbol_files_downloaded += 1;
-        stats.downloaded_bytes += pdb.size;
-        disk_bytes += pdb.size;
-        stats.peak_disk_bytes = stats.peak_disk_bytes.max(disk_bytes);
-        let extraction = extract_features(&pdb.path, binary);
-        if !options.keep_symbol_files {
-            remove_directory(&directory);
-            disk_bytes -= pdb.size;
-        }
-        match extraction {
-            Ok(extraction) => {
-                stats.binaries_scanned += 1;
-                stats.unreadable_descriptors += extraction.unreadable.len();
-                for feature in extraction.features {
-                    found
-                        .entry(feature.name)
-                        .or_default()
-                        .entry(feature.id)
-                        .or_default()
-                        .push(binary.clone());
+    let files_total = work.len();
+    let disk = DiskUse::default();
+    let stop = AtomicBool::new(false);
+    let mut found: BTreeMap<String, BTreeMap<FeatureId, Vec<PathBuf>>> = BTreeMap::new();
+    // Directories this scan wrote, so that a failed scan removes only its own files.
+    let mut created: Vec<PathBuf> = Vec::new();
+    let mut failure: Option<Error> = None;
+    let mut files_done = 0;
+    let mut bytes_done = 0;
+    let process = |(index, plan): (usize, Plan)| {
+        let target: &Target = &targets[index];
+        let outcome = process_target(options, target, plan, &run_directory, &disk);
+        (index, outcome)
+    };
+    run_parallel(
+        work,
+        DOWNLOAD_WORKERS,
+        &stop,
+        process,
+        |(index, outcome)| {
+            files_done += 1;
+            match outcome {
+                Ok(processed) => {
+                    stats.symbol_files_downloaded += 1;
+                    bytes_done += processed.bytes;
+                    created.extend(processed.directory);
+                    let binaries = &targets[index].binaries;
+                    match processed.extraction {
+                        Ok(extraction) => {
+                            stats.binaries_scanned += binaries.len();
+                            stats.unreadable_descriptors += extraction.unreadable.len();
+                            for feature in extraction.features {
+                                found
+                                    .entry(feature.name)
+                                    .or_default()
+                                    .entry(feature.id)
+                                    .or_default()
+                                    .extend(binaries.iter().cloned());
+                            }
+                        }
+                        Err(Error::Pdb { .. } | Error::Binary { .. }) => {
+                            stats.unreadable_pdbs += binaries.len();
+                        }
+                        Err(error) => {
+                            failure.get_or_insert(error);
+                            stop.store(true, Ordering::Relaxed);
+                        }
+                    }
+                }
+                Err(error) => {
+                    failure.get_or_insert(error);
+                    stop.store(true, Ordering::Relaxed);
                 }
             }
-            Err(Error::Pdb { .. } | Error::Binary { .. }) => stats.unreadable_pdbs += 1,
-            Err(error) => {
-                remove_all(&created, &run_directory, &options.symbol_directory);
-                return Err(error);
-            }
-        }
-        observer.progressed(&Progress {
-            files_done: index + 1,
-            files_total: downloads.len(),
-            bytes_done: stats.downloaded_bytes,
-            bytes_total,
-            elapsed: started.elapsed(),
-        });
+            observer.progressed(&Progress {
+                files_done,
+                files_total,
+                bytes_done,
+                bytes_total,
+                elapsed: started.elapsed(),
+            });
+        },
+    );
+    if let Some(error) = failure {
+        remove_all(&created, &run_directory, &options.symbol_directory);
+        return Err(error);
     }
+    stats.downloaded_bytes += bytes_done;
+    stats.peak_disk_bytes = disk.peak.load(Ordering::Relaxed);
     stats.download_duration = started.elapsed();
     // Removes the scan's directories if nothing is left in them.
     let _ = fs::remove_dir(&run_directory);
@@ -229,50 +276,303 @@ pub fn scan_installed_build(
     })
 }
 
-/// Asks the server for the size of every chosen PDB, several requests at a
-/// time (AD-18). Returns the sizes in the order of `chosen` (`None` for a PDB
-/// that is not published) and the average time per request.
-fn probe_sizes(
-    server: &SymbolServer,
-    chosen: &[(PathBuf, PdbReference)],
-) -> Result<(Vec<Option<u64>>, Duration), Error> {
-    if chosen.is_empty() {
-        return Ok((Vec::new(), Duration::ZERO));
-    }
-    let chunk = chosen.len().div_ceil(SIZE_REQUESTS_IN_PARALLEL);
-    let results = std::thread::scope(|scope| {
-        let workers: Vec<_> = chosen
-            .chunks(chunk)
-            .map(|part| {
-                scope.spawn(move || {
-                    let started = Instant::now();
-                    let sizes: Result<Vec<_>, _> = part
-                        .iter()
-                        .map(|(_, reference)| server.size(reference))
-                        .collect();
-                    sizes.map(|sizes| (sizes, started.elapsed()))
-                })
-            })
-            .collect();
-        workers
-            .into_iter()
-            .map(|worker| {
-                worker
-                    .join()
-                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
-            })
-            .collect::<Vec<_>>()
-    });
+/// One distinct symbol file and the binaries that reference it (RF-16.2).
+struct Target {
+    reference: PdbReference,
+    binaries: Vec<PathBuf>,
+}
 
-    let mut sizes = Vec::with_capacity(chosen.len());
-    let mut busy = Duration::ZERO;
-    for result in results {
-        let (part, elapsed) = result.map_err(download_error)?;
-        sizes.extend(part);
-        busy += elapsed;
+/// Chooses the binaries to scan and groups them by the symbol file they
+/// reference, keeping the order in which each symbol file is first seen.
+fn choose_targets(system_root: &Path, stats: &mut ScanStats) -> Vec<Target> {
+    let mut targets: Vec<Target> = Vec::new();
+    let mut by_identity: HashMap<String, usize> = HashMap::new();
+    for binary in candidates::system_binaries(system_root) {
+        stats.binaries_examined += 1;
+        let Some(reference) = candidate_reference(&binary) else {
+            continue;
+        };
+        match by_identity.get(&reference.server_path()) {
+            Some(&index) => targets[index].binaries.push(binary),
+            None => {
+                by_identity.insert(reference.server_path(), targets.len());
+                targets.push(Target {
+                    reference,
+                    binaries: vec![binary],
+                });
+            }
+        }
     }
-    let per_request = busy / u32::try_from(chosen.len()).unwrap_or(u32::MAX);
-    Ok((sizes, per_request))
+    targets
+}
+
+/// What planning found out about one symbol file.
+enum Plan {
+    /// Not published on the server.
+    Missing,
+    /// Light mode: structure read, remaining blocks listed.
+    Partial(PartialPlan),
+    /// Full mode, or a file light mode cannot read in part: the whole file,
+    /// of this size.
+    Whole(u64),
+}
+
+impl Plan {
+    /// Bytes still to download.
+    fn remaining_bytes(&self) -> u64 {
+        match self {
+            Plan::Missing => 0,
+            Plan::Partial(plan) => plan.missing_bytes(),
+            Plan::Whole(size) => *size,
+        }
+    }
+
+    /// Requests still to send.
+    fn remaining_requests(&self) -> usize {
+        match self {
+            Plan::Missing => 0,
+            Plan::Partial(plan) => plan.missing_requests(),
+            Plan::Whole(_) => 1,
+        }
+    }
+}
+
+/// The plans of all targets, with what planning cost.
+struct Planning {
+    plans: Vec<Plan>,
+    /// Bytes downloaded while planning (light mode reads file headers).
+    bytes: u64,
+    /// Average time of one request.
+    per_request: Duration,
+}
+
+/// Plans every target, several at a time: in full mode by asking the server
+/// for each size (AD-18), in light mode by reading each file's structure.
+fn plan_targets(
+    server: &SymbolServer,
+    targets: &[Target],
+    mode: ScanMode,
+) -> Result<Planning, Error> {
+    let stop = AtomicBool::new(false);
+    let mut plans: Vec<Option<Plan>> = (0..targets.len()).map(|_| None).collect();
+    let mut failure: Option<Error> = None;
+    let mut busy = Duration::ZERO;
+    let mut requests = 0;
+    let plan_one = |index: usize| {
+        let started = Instant::now();
+        let reference = &targets[index].reference;
+        let (plan, sent) = match mode {
+            ScanMode::Full => (server.size(reference).map(whole_or_missing), 1),
+            ScanMode::Light => plan_light(server, reference),
+        };
+        (index, plan, sent, started.elapsed())
+    };
+    run_parallel(
+        (0..targets.len()).collect(),
+        PLANNING_WORKERS,
+        &stop,
+        plan_one,
+        |(index, plan, sent, elapsed)| {
+            busy += elapsed;
+            requests += sent;
+            match plan {
+                Ok(plan) => plans[index] = Some(plan),
+                Err(error) => {
+                    failure.get_or_insert(download_error(error));
+                    stop.store(true, Ordering::Relaxed);
+                }
+            }
+        },
+    );
+    if let Some(error) = failure {
+        return Err(error);
+    }
+    let plans: Vec<Plan> = plans
+        .into_iter()
+        .map(|plan| plan.unwrap_or(Plan::Missing))
+        .collect();
+    let bytes = plans
+        .iter()
+        .map(|plan| match plan {
+            Plan::Partial(plan) => plan.planned_bytes(),
+            _ => 0,
+        })
+        .sum();
+    let per_request = if requests == 0 {
+        Duration::ZERO
+    } else {
+        busy / u32::try_from(requests).unwrap_or(u32::MAX)
+    };
+    Ok(Planning {
+        plans,
+        bytes,
+        per_request,
+    })
+}
+
+/// A size answer as a plan.
+fn whole_or_missing(size: Option<u64>) -> Plan {
+    size.map_or(Plan::Missing, Plan::Whole)
+}
+
+/// Plans one symbol file in light mode. Returns the plan and the number of
+/// requests sent.
+fn plan_light(
+    server: &SymbolServer,
+    reference: &PdbReference,
+) -> (Result<Plan, flagscope_symbols::Error>, usize) {
+    let mut sent = 0;
+    let mut fetch = |start, length| {
+        sent += 1;
+        server.fetch_range(reference, start, length)
+    };
+    let plan = match pdb_symbols::plan_partial(&mut fetch) {
+        Ok(plan) => Ok(Plan::Partial(plan)),
+        Err(PartialError::Fetch(flagscope_symbols::Error::Status { status: 404, .. })) => {
+            Ok(Plan::Missing)
+        }
+        Err(PartialError::Fetch(error)) => Err(error),
+        // A file light mode cannot read in part is downloaded whole.
+        Err(PartialError::NotMsf7 | PartialError::Format) => {
+            sent += 1;
+            server.size(reference).map(whole_or_missing)
+        }
+    };
+    (plan, sent)
+}
+
+/// The result of downloading and reading one symbol file.
+struct Processed {
+    /// Features read, or why the file could not be read.
+    extraction: Result<Extraction, Error>,
+    /// Bytes downloaded for it in this step.
+    bytes: u64,
+    /// Directory written for it, in full mode.
+    directory: Option<PathBuf>,
+}
+
+/// Downloads and reads one symbol file. An error is returned only for
+/// failures that stop the scan.
+fn process_target(
+    options: &ScanOptions,
+    target: &Target,
+    plan: Plan,
+    run_directory: &Path,
+    disk: &DiskUse,
+) -> Result<Processed, Error> {
+    // All binaries of a target are built from the same sources, so the first one is read.
+    let binary = &target.binaries[0];
+    match plan {
+        Plan::Missing => Ok(Processed {
+            extraction: Ok(Extraction::default()),
+            bytes: 0,
+            directory: None,
+        }),
+        Plan::Partial(plan) => {
+            let planned = plan.planned_bytes();
+            let mut fetch =
+                |start, length| options.server.fetch_range(&target.reference, start, length);
+            let label = PathBuf::from(target.reference.server_path());
+            let pdb = match plan.complete(&mut fetch) {
+                Ok(pdb) => pdb,
+                Err(PartialError::Fetch(error)) => return Err(download_error(error)),
+                Err(PartialError::NotMsf7 | PartialError::Format) => {
+                    return Ok(Processed {
+                        extraction: Err(Error::Pdb {
+                            path: label,
+                            message: "inconsistent MSF structure".to_owned(),
+                        }),
+                        bytes: 0,
+                        directory: None,
+                    });
+                }
+            };
+            let bytes = pdb.held_bytes().saturating_sub(planned);
+            let extraction = pdb_symbols::descriptor_symbols_partial(pdb, &label)
+                .and_then(|symbols| read_descriptors(symbols, binary));
+            Ok(Processed {
+                extraction,
+                bytes,
+                directory: None,
+            })
+        }
+        Plan::Whole(_) => {
+            let directory = run_directory.join(target.reference.server_path().replace('/', "_"));
+            let pdb = options
+                .server
+                .download(&target.reference, &directory)
+                .map_err(download_error)?;
+            disk.add(pdb.size);
+            let extraction = extract_features(&pdb.path, binary);
+            if !options.keep_symbol_files {
+                remove_directory(&directory);
+                disk.remove(pdb.size);
+            }
+            Ok(Processed {
+                extraction,
+                bytes: pdb.size,
+                directory: Some(directory),
+            })
+        }
+    }
+}
+
+/// Disk space taken by the scan's symbol files, now and at its largest.
+#[derive(Debug, Default)]
+struct DiskUse {
+    current: AtomicU64,
+    peak: AtomicU64,
+}
+
+impl DiskUse {
+    /// Records a file written to disk.
+    fn add(&self, bytes: u64) {
+        let now = self.current.fetch_add(bytes, Ordering::Relaxed) + bytes;
+        self.peak.fetch_max(now, Ordering::Relaxed);
+    }
+
+    /// Records a file deleted from disk.
+    fn remove(&self, bytes: u64) {
+        self.current.fetch_sub(bytes, Ordering::Relaxed);
+    }
+}
+
+/// Runs `work` on every item with `workers` threads, and hands each result to
+/// `on_result` on the calling thread, in the order they finish. Workers take
+/// no new item once `stop` is set.
+fn run_parallel<T, R, W, F>(
+    items: Vec<T>,
+    workers: usize,
+    stop: &AtomicBool,
+    work: W,
+    mut on_result: F,
+) where
+    T: Send,
+    R: Send,
+    W: Fn(T) -> R + Sync,
+    F: FnMut(R),
+{
+    let queue = Mutex::new(items.into_iter());
+    let (sender, receiver) = mpsc::channel();
+    std::thread::scope(|scope| {
+        for _ in 0..workers {
+            let sender = sender.clone();
+            let (queue, work) = (&queue, &work);
+            scope.spawn(move || {
+                while !stop.load(Ordering::Relaxed) {
+                    let next = queue.lock().unwrap_or_else(PoisonError::into_inner).next();
+                    let Some(item) = next else { break };
+                    if sender.send(work(item)).is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+        drop(sender);
+        for result in receiver {
+            on_result(result);
+        }
+    });
 }
 
 /// Measures the transfer speed, in bytes per second, by downloading the start
